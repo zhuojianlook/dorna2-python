@@ -1,0 +1,53 @@
+{
+  "tool_lz": 300.0,
+  "tool_cx": -7.799999999999999,
+  "tool_cy": -16.0,
+  "tool_center_demo_radius_mm": 10.0,
+  "alarm_sensitivity": 1.0,
+  "approach_mm": 70.0,
+  "endstop_keywords": [
+    "ENDSTOP",
+    "LIMIT",
+    "LIM",
+    "HIT",
+    "END"
+  ],
+  "endstop_timeout_ms": 0,
+  "plunger_fwd_rate": 1600,
+  "plunger_bwd_rate": 1600,
+  "pose_final_wait_s": 0.0,
+  "plunger_dir_sign": 1,
+  "swap_endstops": false,
+  "expel_endstop": "BWD",
+  "reserved_poses": [],
+  "uvc1_rot": 2,
+  "uvc1_flip_h": false,
+  "uvc1_flip_v": false,
+  "uvc2_rot": 0,
+  "uvc2_flip_h": false,
+  "uvc2_flip_v": false,
+  "syringe_volume_ul": 10.0,
+  "syringe_rotations_total": 22081.30283355713,
+  "syringe_step_ul": 1.0,
+  "syringe_step_rotations": 2208.130283355713,
+  "syringe_remaining_ul": 0.0,
+  "syringe_full_travel_time_s": 13.800814270973206,
+  "syringe_step_time_s": 1.3800814270973207,
+  "injection_active": false,
+  "injection_study": "test",
+  "injection_subject": "test",
+  "injection_material": "test",
+  "injection_date": "2025-12-05",
+  "injection_retract_mm": 10.0,
+  "injection_advance_mm": 0.0,
+  "saw_amp_deg": 3.0,
+  "saw_freq_hz": 1.0,
+  "tool_presets": [
+    {
+      "name": "7642-01(Tester)",
+      "lz": 307.79999999999995,
+      "cx": 0.0,
+      "cy": 0.0
+    }
+  ]
+}

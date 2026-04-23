@@ -1,0 +1,2 @@
+sudo apt install -y python3-opencv
+sudo apt install -y v4l-utils ffmpeg qv4l2 guvcview
