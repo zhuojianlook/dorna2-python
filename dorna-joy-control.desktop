@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Dorna Joy Control
+Comment=Launch the experimental Dorna joystick control UI
+Exec=/home/zhuojian/dorna2-python-experimental/launch_dorna_joy_control.sh
+Path=/home/zhuojian/dorna2-python-experimental
+Terminal=false
+StartupNotify=true
+Categories=Utility;
+Keywords=dorna;robot;joystick;microscope;injection;

@@ -33,7 +33,8 @@ pip install . --upgrade --force-reinstall
 
 ### Experimental Startup
 - Run `./launch_dorna_joy_control.sh` from this checkout to activate `dorna-bridge`, start the integrated launcher, and then open the control UI.
-- The launcher remembers host, fullscreen, and UVC selections in `settings.json`, and still allows manual overrides from the command line if needed.
+- A `.desktop` launcher is included as `dorna-joy-control.desktop` and has been installed for this user under `~/.local/share/applications/`.
+- The launcher remembers host, fullscreen, and UVC selections in the local `.dorna_launcher.json` file, and still allows manual overrides from the command line if needed.
 
 ### Getting Started
 First, import `Dorna` class from the `dorna2` module, and then create a `Dorna` object.

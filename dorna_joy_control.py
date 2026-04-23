@@ -530,6 +530,7 @@ AXIS_GUARD_WINDOW = 0.15
 
 POSES_PATH     = "poses.json"
 SETTINGS_PATH  = "settings.json"
+STARTUP_SETTINGS_PATH = ".dorna_launcher.json"
 MIDWAY_SUFFIX  = "__midway"
 
 DEFAULT_TOOL_LZ     = 205.0
@@ -768,6 +769,46 @@ def save_settings(settings, path=SETTINGS_PATH):
     except Exception as e:
         print(f"⚠️ Could not save settings to {path}: {e}")
 
+def load_startup_settings(path=STARTUP_SETTINGS_PATH):
+    defaults = {
+        "startup_host": DEFAULT_DORNA_HOST,
+        "startup_port": DEFAULT_DORNA_PORT,
+        "startup_uvc1": "",
+        "startup_uvc2": "",
+        "startup_uvc_fps": DEFAULT_UVC_FPS,
+        "startup_uvc_try_index1": False,
+        "startup_fullscreen": False,
+        "startup_show_launcher": True,
+    }
+
+    # Backward compatibility with any startup keys previously written to settings.json.
+    try:
+        legacy = load_settings()
+        for key in defaults:
+            if key in legacy:
+                defaults[key] = legacy[key]
+    except Exception:
+        pass
+
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                for key in defaults:
+                    if key in data:
+                        defaults[key] = data[key]
+    except Exception as e:
+        print(f"⚠️ Could not load startup settings from {path}: {e}")
+    return defaults
+
+def save_startup_settings(settings, path=STARTUP_SETTINGS_PATH):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=2)
+    except Exception as e:
+        print(f"⚠️ Could not save startup settings to {path}: {e}")
+
 def _format_uvc_inventory_label(item: dict) -> str:
     base = f"{item.get('name', 'Unknown')} [{os.path.basename(item.get('node', ''))}]"
     src = item.get("path", "")
@@ -800,7 +841,7 @@ def _persist_startup_args(settings, args):
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
     settings["startup_show_launcher"] = bool(args.launcher)
-    save_settings(settings)
+    save_startup_settings(settings)
 
 def show_startup_launcher(args):
     if not os.environ.get("DISPLAY") and sys.platform not in ("win32", "darwin"):
@@ -2208,6 +2249,13 @@ class RobotThread(threading.Thread):
         self.saw_phase = 0.0
         self.saw_last_t = time.time()
 
+    def _play_live(self, cmd: dict):
+        """
+        Dispatch a live/manual motion command without waiting for completion.
+        Blocking on every incremental joystick move adds visible control lag.
+        """
+        return self.robot.play_dict(cmd, timeout=0)
+
     def _set_current_named(self, name: str | None):
         self.current_named = name
         with self.state.lock:
@@ -3011,6 +3059,7 @@ class RobotThread(threading.Thread):
                 self.j5v = self.state.poses["Default"].get("j5", 0.0)
                 self.state.j5 = self.j5v
 
+        control_hz = 60.0
         next_t = time.time()
         joint_poll_time = 0.0
 
@@ -3018,7 +3067,7 @@ class RobotThread(threading.Thread):
             now = time.time()
             if now < next_t:
                 time.sleep(next_t - now)
-            next_t += 1/200
+            next_t += 1 / control_hz
 
             try:
                 while True:
@@ -3641,19 +3690,22 @@ class RobotThread(threading.Thread):
                 if abs(ly) >= abs(lx):
                     d = -ly * sx
                     tz = self.R[:,2]
-                    self.robot.play_dict({"cmd":"lmove","rel":1,
-                                          "x":tz[0]*d,"y":tz[1]*d,"z":tz[2]*d,
-                                          "vel":self.VT,"cont":1})
-                    self.x0 += tz[0]*d
-                    self.y0 += tz[1]*d
-                    self.z0 += tz[2]*d
+                    dx = tz[0] * d
+                    dy = tz[1] * d
+                    dz = tz[2] * d
+                    self._play_live({"cmd":"lmove","rel":1,
+                                     "x":dx,"y":dy,"z":dz,
+                                     "vel":self.VT,"cont":1})
+                    self.x0 += dx
+                    self.y0 += dy
+                    self.z0 += dz
 
             if manual_enabled and abs(lx) > self.DZ and abs(lx) > abs(ly):
                 delta = lx * sj5
                 self.j5v += delta
                 self.R = self.R @ axis_angle_to_R(0, 0, delta)
                 self.R = orthonormalize_R(self.R)
-                self.robot.play_dict({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR})
+                self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
                 with self.state.lock:
                     self.state.j5 = self.j5v
 
@@ -3673,9 +3725,9 @@ class RobotThread(threading.Thread):
 
             if moved:
                 a1,b1,c1 = R_to_axis_angle(self.R)
-                self.robot.play_dict({"cmd":"lmove","rel":0,
-                                      "x":self.x0,"y":self.y0,"z":self.z0,
-                                      "a":a1,"b":b1,"c":c1,"vel":self.VR})
+                self._play_live({"cmd":"lmove","rel":0,
+                                 "x":self.x0,"y":self.y0,"z":self.z0,
+                                 "a":a1,"b":b1,"c":c1,"vel":self.VR,"cont":1})
                 tz = self.R[:,2]
                 pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
                 yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
@@ -3694,16 +3746,16 @@ class RobotThread(threading.Thread):
                 if hy != 0:
                     step = float(hy) * sh * DPAD_Z_SIGN
                     if at_default:
-                        self.robot.play_dict({"cmd":"lmove","rel":1,
-                                              "x":0.0,"y":0.0,"z":step,
-                                              "vel":self.VT,"cont":1})
+                        self._play_live({"cmd":"lmove","rel":1,
+                                         "x":0.0,"y":0.0,"z":step,
+                                         "vel":self.VT,"cont":1})
                         self.z0 += step
                     else:
                         up_axis = tx if abs(tx[2]) >= abs(ty[2]) else ty
                         dx, dy, dz = up_axis[0]*step, up_axis[1]*step, up_axis[2]*step
-                        self.robot.play_dict({"cmd":"lmove","rel":1,
-                                              "x":dx,"y":dy,"z":dz,
-                                              "vel":self.VT,"cont":1})
+                        self._play_live({"cmd":"lmove","rel":1,
+                                         "x":dx,"y":dy,"z":dz,
+                                         "vel":self.VT,"cont":1})
                         self.x0 += dx
                         self.y0 += dy
                         self.z0 += dz
@@ -3715,9 +3767,9 @@ class RobotThread(threading.Thread):
                     else:
                         perp = np.array([0.0, -hx_eff, 0.0])
                     dx, dy = perp[0]*sh, perp[1]*sh
-                    self.robot.play_dict({"cmd":"lmove","rel":1,
-                                          "x":dx,"y":dy,"z":0.0,
-                                          "vel":self.VT,"cont":1})
+                    self._play_live({"cmd":"lmove","rel":1,
+                                     "x":dx,"y":dy,"z":0.0,
+                                     "vel":self.VT,"cont":1})
                     self.x0 += dx
                     self.y0 += dy
 
@@ -3743,7 +3795,7 @@ class RobotThread(threading.Thread):
                     self.R = self.R @ axis_angle_to_R(0, 0, delta)
                     self.R = orthonormalize_R(self.R)
                     try:
-                        self.robot.play_dict({"cmd": "jmove", "rel": 1, "j5": delta, "vel": self.VR})
+                        self._play_live({"cmd": "jmove", "rel": 1, "j5": delta, "vel": self.VR, "cont": 1})
                     except Exception:
                         pass
                     with self.state.lock:
@@ -4723,7 +4775,7 @@ def draw_subject_modal(screen, subject_text, step_index, allow_advance):
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     args = parse_args()
-    startup_settings = load_settings()
+    startup_settings = load_startup_settings()
     args = _resolve_startup_args(args, startup_settings)
     if args.launcher:
         launched = show_startup_launcher(args)
