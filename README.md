@@ -26,6 +26,11 @@ Finally
 pip install . --upgrade --force-reinstall
 ```
 
+### Repository Layout
+- `dorna_joy_control.py` is the active joystick/control script in this checkout.
+- `Legacy/` contains archived controller variants and older support scripts kept for reference.
+- `poses.json`, `routines.json`, `routine.txt`, and `settings.json` remain at the repository root because the active control workflow loads them from there.
+
 ### Getting Started
 First, import `Dorna` class from the `dorna2` module, and then create a `Dorna` object.
 ``` python
