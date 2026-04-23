@@ -64,8 +64,20 @@ def _usb_info_from_node(node: str) -> dict:
         cur = parent
     return {"busnum":"", "devpath":"", "speed":""}
 
+def _canon_usb_alias(path: str) -> str:
+    return re.sub(r"-usbv[23]-", "-usb-", path)
+
+def _usb_variant_rank(path: str) -> int:
+    if "-usb-" in path and "-usbv" not in path:
+        return 0
+    if "-usbv2-" in path:
+        return 1
+    if "-usbv3-" in path:
+        return 2
+    return 3
+
 def discover_uvc_index0(limit=4) -> list:
-    found = []
+    found = {}
     links = sorted(glob.glob("/dev/v4l/by-path/*video-index0"))
     for link in links:
         node = os.path.realpath(link)
@@ -75,27 +87,29 @@ def discover_uvc_index0(limit=4) -> list:
         if _is_realsense_name(name):
             continue
         info = _usb_info_from_node(node)
-        found.append({
+        item = {
             "bypath": link,
             "node": node,
             "name": name,
             "busnum": info["busnum"],
             "devpath": info["devpath"],
-        })
-    return found[:limit]
+        }
+        # Deduplicate alias paths that point to the same physical camera.
+        key = (info["busnum"], info["devpath"]) if (info["busnum"] or info["devpath"]) else node
+        prev = found.get(key)
+        if prev is None or _usb_variant_rank(link) < _usb_variant_rank(prev["bypath"]):
+            found[key] = item
+    return sorted(
+        found.values(),
+        key=lambda item: (item["busnum"], item["devpath"], item["bypath"]),
+    )[:limit]
 
 def find_uvc_devices(limit=2):
     links = glob.glob("/dev/v4l/by-path/*video-index[01]")
 
     def canon_base(p):
         b = re.sub(r"-video-index[01]$", "", p)
-        return b.replace("/usbv2-", "/usb-").replace("/usbv3-", "/usb-")
-
-    def variant_rank(p):
-        if "/usb-" in p and "/usbv" not in p: return 0
-        if "/usbv2-" in p: return 1
-        if "/usbv3-" in p: return 2
-        return 3
+        return _canon_usb_alias(b)
 
     buckets = {}
     for link in links:
@@ -108,8 +122,8 @@ def find_uvc_devices(limit=2):
 
     out = []
     for base, b in buckets.items():
-        i0 = sorted(b["index0"], key=variant_rank)
-        i1 = sorted(b["index1"], key=variant_rank)
+        i0 = sorted(b["index0"], key=_usb_variant_rank)
+        i1 = sorted(b["index1"], key=_usb_variant_rank)
         pick = i0[0] if i0 else (i1[0] if i1 else None)
         if not pick:
             continue
@@ -139,7 +153,7 @@ class UvcThread(threading.Thread):
         self.name = name
         self.try_index1_fallback = bool(try_index1_fallback)
 
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._frame = None
         self._opened = False
@@ -218,7 +232,7 @@ class UvcThread(threading.Thread):
         return self._status
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def run(self):
         paths_to_try = [self.device]
@@ -258,7 +272,7 @@ class UvcThread(threading.Thread):
             fail_count = 0
             max_fail_before_reopen = 300   # ~0.3s at 1 kHz loop
 
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 ok, frame = cap.read()
                 if not ok or frame is None:
                     fail_count += 1
@@ -312,7 +326,7 @@ class RealSenseThread(threading.Thread):
         self.req_h = int(height)
         self.req_fps = int(fps)
 
-        self._stop = threading.Event()
+        self._stop_event = threading.Event()
         self._lock = threading.Lock()
         self._frame = None
         self._status = "Initializing…"
@@ -329,7 +343,7 @@ class RealSenseThread(threading.Thread):
         return self._status
 
     def stop(self):
-        self._stop.set()
+        self._stop_event.set()
 
     def _start_with(self, kind):
         self.pipeline = rs.pipeline()
@@ -367,7 +381,7 @@ class RealSenseThread(threading.Thread):
                     return
 
         try:
-            while not self._stop.is_set():
+            while not self._stop_event.is_set():
                 frames = self.pipeline.poll_for_frames()
                 if not frames:
                     try:
@@ -4478,6 +4492,10 @@ def main():
             autodetected = find_uvc_devices(limit=2)
             uvc1_path = (autodetected[0] if len(autodetected) >= 1 else "")
             uvc2_path = (autodetected[1] if len(autodetected) >= 2 else "")
+
+    if uvc1_path and uvc2_path and os.path.realpath(uvc1_path) == os.path.realpath(uvc2_path):
+        print("[UVC] Auto-pick selected the same device twice; using a single UVC camera.")
+        uvc2_path = ""
 
     uvc_threads = []
     if uvc1_path:
