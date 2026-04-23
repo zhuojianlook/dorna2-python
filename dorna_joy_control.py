@@ -28,6 +28,9 @@ from dorna2 import Dorna
 
 # Where to place step recordings
 DATA_ROOT_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "RobotInjectionData")
+DEFAULT_DORNA_HOST = "10.42.0.11"
+DEFAULT_DORNA_PORT = 443
+DEFAULT_UVC_FPS = 30
 
 # ─────────────────────────────────────────────────────────────────────────────
 #                              UVC CAMERA SUPPORT
@@ -76,6 +79,19 @@ def _usb_variant_rank(path: str) -> int:
         return 2
     return 3
 
+def _camera_path_rank(path: str):
+    if path.endswith("video-index0"):
+        idx_rank = 0
+    elif path.endswith("video-index1"):
+        idx_rank = 1
+    else:
+        idx_rank = 2
+    return (idx_rank, _usb_variant_rank(path), path)
+
+def _video_node_sort_key(path: str):
+    m = re.match(r"^/dev/video(\d+)$", str(path))
+    return int(m.group(1)) if m else 9999
+
 def discover_uvc_index0(limit=4) -> list:
     found = {}
     links = sorted(glob.glob("/dev/v4l/by-path/*video-index0"))
@@ -103,6 +119,61 @@ def discover_uvc_index0(limit=4) -> list:
         found.values(),
         key=lambda item: (item["busnum"], item["devpath"], item["bypath"]),
     )[:limit]
+
+def discover_uvc_inventory(limit=12) -> list:
+    bypath_groups = {}
+    covered_nodes = set()
+    for link in sorted(glob.glob("/dev/v4l/by-path/*video-index[01]")):
+        node = os.path.realpath(link)
+        if not node.startswith("/dev/video"):
+            continue
+        name = _v4l_name_for_node(node)
+        if _is_realsense_name(name):
+            continue
+        base = _canon_usb_alias(re.sub(r"-video-index[01]$", "", link))
+        info = _usb_info_from_node(node)
+        item = bypath_groups.setdefault(base, {
+            "path": link,
+            "node": node,
+            "name": name,
+            "busnum": info["busnum"],
+            "devpath": info["devpath"],
+            "aliases": [],
+            "source": "by-path",
+        })
+        item["aliases"].append(link)
+        covered_nodes.add(node)
+        if _camera_path_rank(link) < _camera_path_rank(item["path"]):
+            item["path"] = link
+            item["node"] = node
+            item["name"] = name
+            item["busnum"] = info["busnum"]
+            item["devpath"] = info["devpath"]
+
+    out = []
+    for base in sorted(bypath_groups):
+        item = bypath_groups[base]
+        item["aliases"] = sorted(set(item["aliases"]), key=_camera_path_rank)
+        out.append(item)
+
+    for node in sorted(glob.glob("/dev/video[0-9]*"), key=_video_node_sort_key):
+        if node in covered_nodes:
+            continue
+        name = _v4l_name_for_node(node)
+        if _is_realsense_name(name):
+            continue
+        info = _usb_info_from_node(node)
+        out.append({
+            "path": node,
+            "node": node,
+            "name": name,
+            "busnum": info["busnum"],
+            "devpath": info["devpath"],
+            "aliases": [node],
+            "source": "direct",
+        })
+
+    return out[:limit]
 
 def find_uvc_devices(limit=2):
     links = glob.glob("/dev/v4l/by-path/*video-index[01]")
@@ -629,6 +700,14 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": saw_amp_deg,
             "saw_freq_hz": saw_freq_hz,
             "tool_presets": norm_presets,
+            "startup_host": str(data.get("startup_host", DEFAULT_DORNA_HOST)),
+            "startup_port": int(data.get("startup_port", DEFAULT_DORNA_PORT)),
+            "startup_uvc1": str(data.get("startup_uvc1", "")),
+            "startup_uvc2": str(data.get("startup_uvc2", "")),
+            "startup_uvc_fps": int(data.get("startup_uvc_fps", DEFAULT_UVC_FPS)),
+            "startup_uvc_try_index1": bool(data.get("startup_uvc_try_index1", False)),
+            "startup_fullscreen": bool(data.get("startup_fullscreen", False)),
+            "startup_show_launcher": bool(data.get("startup_show_launcher", True)),
         }
     except Exception as e:
         print(f"⚠️ Using default settings (could not load {path}: {e})")
@@ -671,6 +750,14 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": 3.0,
             "saw_freq_hz": 1.0,
             "tool_presets": [],
+            "startup_host": DEFAULT_DORNA_HOST,
+            "startup_port": DEFAULT_DORNA_PORT,
+            "startup_uvc1": "",
+            "startup_uvc2": "",
+            "startup_uvc_fps": DEFAULT_UVC_FPS,
+            "startup_uvc_try_index1": False,
+            "startup_fullscreen": False,
+            "startup_show_launcher": True,
         }
 
 
@@ -680,6 +767,208 @@ def save_settings(settings, path=SETTINGS_PATH):
             json.dump(settings, f, indent=2)
     except Exception as e:
         print(f"⚠️ Could not save settings to {path}: {e}")
+
+def _format_uvc_inventory_label(item: dict) -> str:
+    base = f"{item.get('name', 'Unknown')} [{os.path.basename(item.get('node', ''))}]"
+    src = item.get("path", "")
+    if item.get("busnum") or item.get("devpath"):
+        base += f" bus={item.get('busnum', '')} devpath={item.get('devpath', '')}"
+    if src:
+        base += f" via {src}"
+    return base
+
+def _resolve_startup_args(args, settings):
+    args.host = str(args.host or settings.get("startup_host", DEFAULT_DORNA_HOST) or DEFAULT_DORNA_HOST)
+    args.port = int(args.port if args.port is not None else settings.get("startup_port", DEFAULT_DORNA_PORT))
+    args.uvc1 = str(args.uvc1 or settings.get("startup_uvc1", "") or "")
+    args.uvc2 = str(args.uvc2 or settings.get("startup_uvc2", "") or "")
+    args.uvc_fps = int(args.uvc_fps if args.uvc_fps is not None else settings.get("startup_uvc_fps", DEFAULT_UVC_FPS))
+    if args.uvc_try_index1 is None:
+        args.uvc_try_index1 = bool(settings.get("startup_uvc_try_index1", False))
+    if args.fullscreen is None:
+        args.fullscreen = bool(settings.get("startup_fullscreen", False))
+    if args.launcher is None:
+        args.launcher = bool(settings.get("startup_show_launcher", True))
+    return args
+
+def _persist_startup_args(settings, args):
+    settings["startup_host"] = str(args.host or DEFAULT_DORNA_HOST)
+    settings["startup_port"] = int(args.port or DEFAULT_DORNA_PORT)
+    settings["startup_uvc1"] = str(args.uvc1 or "")
+    settings["startup_uvc2"] = str(args.uvc2 or "")
+    settings["startup_uvc_fps"] = int(args.uvc_fps or DEFAULT_UVC_FPS)
+    settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
+    settings["startup_fullscreen"] = bool(args.fullscreen)
+    settings["startup_show_launcher"] = bool(args.launcher)
+    save_settings(settings)
+
+def show_startup_launcher(args):
+    if not os.environ.get("DISPLAY") and sys.platform not in ("win32", "darwin"):
+        print("[Launcher] DISPLAY is not set; starting without the launcher UI.")
+        return args
+
+    try:
+        import tkinter as tk
+        from tkinter import messagebox, ttk
+    except Exception as e:
+        print(f"[Launcher] Could not start Tk launcher: {e}")
+        return args
+
+    result = {"ok": False}
+    root = tk.Tk()
+    root.title("Dorna Joy Control Launcher")
+    root.resizable(False, False)
+
+    host_var = tk.StringVar(value=str(args.host or DEFAULT_DORNA_HOST))
+    port_var = tk.StringVar(value=str(args.port or DEFAULT_DORNA_PORT))
+    uvc1_var = tk.StringVar(value=str(args.uvc1 or ""))
+    uvc2_var = tk.StringVar(value=str(args.uvc2 or ""))
+    fps_var = tk.StringVar(value=str(args.uvc_fps or DEFAULT_UVC_FPS))
+    try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
+    fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
+    launcher_var = tk.BooleanVar(value=bool(args.launcher))
+    status_var = tk.StringVar(value="Detecting cameras...")
+    option_paths = [""]
+
+    frame = ttk.Frame(root, padding=14)
+    frame.grid(row=0, column=0, sticky="nsew")
+    frame.columnconfigure(1, weight=1)
+
+    ttk.Label(frame, text="Dorna Joy Control", font=("TkDefaultFont", 13, "bold")).grid(
+        row=0, column=0, columnspan=4, sticky="w"
+    )
+    ttk.Label(
+        frame,
+        text="Pick startup options here instead of launching the robot from a long CLI command.",
+        wraplength=640,
+    ).grid(row=1, column=0, columnspan=4, sticky="w", pady=(4, 12))
+
+    ttk.Label(frame, text="Robot host").grid(row=2, column=0, sticky="w")
+    host_entry = ttk.Entry(frame, textvariable=host_var, width=26)
+    host_entry.grid(row=2, column=1, sticky="we", padx=(8, 0))
+
+    ttk.Label(frame, text="Port").grid(row=2, column=2, sticky="w", padx=(12, 0))
+    port_entry = ttk.Entry(frame, textvariable=port_var, width=8)
+    port_entry.grid(row=2, column=3, sticky="w", padx=(8, 0))
+
+    ttk.Label(frame, text="UVC #1").grid(row=3, column=0, sticky="w", pady=(10, 0))
+    uvc1_combo = ttk.Combobox(frame, textvariable=uvc1_var, width=80)
+    uvc1_combo.grid(row=3, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(10, 0))
+
+    ttk.Label(frame, text="UVC #2").grid(row=4, column=0, sticky="w", pady=(6, 0))
+    uvc2_combo = ttk.Combobox(frame, textvariable=uvc2_var, width=80)
+    uvc2_combo.grid(row=4, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(6, 0))
+
+    ttk.Label(
+        frame,
+        text="Leave a UVC path blank to use auto-detect. The inventory below shows what Linux currently exposes.",
+        wraplength=640,
+    ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(4, 0))
+
+    ttk.Label(frame, text="UVC FPS").grid(row=6, column=0, sticky="w", pady=(10, 0))
+    fps_combo = ttk.Combobox(frame, textvariable=fps_var, values=("30", "15", "10"), width=8, state="readonly")
+    fps_combo.grid(row=6, column=1, sticky="w", padx=(8, 0), pady=(10, 0))
+
+    ttk.Checkbutton(frame, text="Try sibling video-index1 if index0 has no frames", variable=try_index1_var).grid(
+        row=7, column=0, columnspan=4, sticky="w", pady=(8, 0)
+    )
+    ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
+        row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
+    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+        row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
+
+    ttk.Separator(frame).grid(row=10, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
+        row=11, column=0, columnspan=4, sticky="w"
+    )
+    inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
+    inventory_text.grid(row=12, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.configure(state="disabled")
+    ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
+        row=13, column=0, columnspan=4, sticky="w", pady=(0, 8)
+    )
+
+    button_bar = ttk.Frame(frame)
+    button_bar.grid(row=14, column=0, columnspan=4, sticky="e", pady=(4, 0))
+
+    def refresh_inventory():
+        nonlocal option_paths
+        inventory = discover_uvc_inventory(limit=12)
+        option_paths = [""] + [item["path"] for item in inventory]
+        uvc1_combo["values"] = option_paths
+        uvc2_combo["values"] = option_paths
+        if not uvc1_var.get():
+            uvc1_combo.set("")
+        if not uvc2_var.get():
+            uvc2_combo.set("")
+        lines = []
+        if not inventory:
+            lines.append("No non-RealSense UVC cameras were detected.")
+        else:
+            for idx, item in enumerate(inventory, start=1):
+                lines.append(f"{idx}. {_format_uvc_inventory_label(item)}")
+                aliases = item.get("aliases", [])
+                extra_aliases = [a for a in aliases if a != item.get("path")]
+                if extra_aliases:
+                    lines.append("   aliases: " + ", ".join(extra_aliases))
+        inventory_text.configure(state="normal")
+        inventory_text.delete("1.0", "end")
+        inventory_text.insert("1.0", "\n".join(lines))
+        inventory_text.configure(state="disabled")
+        if len(inventory) >= 2:
+            status_var.set(f"{len(inventory)} UVC camera paths detected.")
+        elif len(inventory) == 1:
+            status_var.set("Only 1 UVC camera path was detected. You can still start with one camera.")
+        else:
+            status_var.set("No UVC camera paths were detected. Start only if you expect placeholders.")
+
+    def cancel():
+        root.destroy()
+
+    def start():
+        try:
+            port = int(port_var.get().strip())
+        except Exception:
+            messagebox.showerror("Invalid port", "Port must be an integer.")
+            return
+        try:
+            fps = int(fps_var.get().strip())
+        except Exception:
+            messagebox.showerror("Invalid FPS", "UVC FPS must be an integer.")
+            return
+
+        host = host_var.get().strip() or DEFAULT_DORNA_HOST
+        uvc1 = uvc1_var.get().strip()
+        uvc2 = uvc2_var.get().strip()
+        if uvc1 and uvc2 and os.path.realpath(uvc1) == os.path.realpath(uvc2):
+            messagebox.showerror("Duplicate UVC selection", "UVC #1 and UVC #2 resolve to the same device.")
+            return
+
+        args.host = host
+        args.port = port
+        args.uvc1 = uvc1
+        args.uvc2 = uvc2
+        args.uvc_fps = fps
+        args.uvc_try_index1 = bool(try_index1_var.get())
+        args.fullscreen = bool(fullscreen_var.get())
+        args.launcher = bool(launcher_var.get())
+        result["ok"] = True
+        root.destroy()
+
+    ttk.Button(button_bar, text="Refresh Cameras", command=refresh_inventory).grid(row=0, column=0, padx=(0, 8))
+    ttk.Button(button_bar, text="Cancel", command=cancel).grid(row=0, column=1, padx=(0, 8))
+    ttk.Button(button_bar, text="Start Control", command=start).grid(row=0, column=2)
+
+    refresh_inventory()
+    host_entry.focus_set()
+    root.protocol("WM_DELETE_WINDOW", cancel)
+    root.mainloop()
+
+    if result["ok"]:
+        return args
+    return None
 
 def save_poses(poses, path=POSES_PATH):
     try:
@@ -1623,17 +1912,23 @@ class StepRecorder:
 
 def parse_args():
     p = argparse.ArgumentParser(description="Joystick control for Dorna + RealSense + UVC microscopes (routine + injection)")
-    p.add_argument("--host", "-H", default="10.42.0.11", help="IP address of your Dorna controller")
-    p.add_argument("--port", "-P", type=int, default=443, help="Port for Dorna control (usually 443)")
+    p.add_argument("--host", "-H", default=None, help="IP address of your Dorna controller")
+    p.add_argument("--port", "-P", type=int, default=None, help="Port for Dorna control (usually 443)")
 
-    p.add_argument("--uvc1", default="", help="UVC camera #1 device path (default: auto-detect)")
-    p.add_argument("--uvc2", default="", help="UVC camera #2 device path (default: auto-detect)")
-    p.add_argument("--uvc-fps", type=int, default=30, help="FPS for UVCs")
+    p.add_argument("--uvc1", default=None, help="UVC camera #1 device path (default: launcher/settings/auto-detect)")
+    p.add_argument("--uvc2", default=None, help="UVC camera #2 device path (default: launcher/settings/auto-detect)")
+    p.add_argument("--uvc-fps", type=int, default=None, help="FPS for UVCs")
     p.add_argument("--uvc-rotate", action="store_true", default=True, help="(legacy) rotate UVC cameras 180° (now overridden by GUI settings)")
     p.add_argument("--uvc-no-rotate", dest="uvc_rotate", action="store_false", help="Disable legacy 180° rotation (GUI rotation still applies)")
-    p.add_argument("--uvc-try-index1", action="store_true", help="Also try the sibling video-index1 node if index0 yields no frames")
+    p.add_argument("--uvc-try-index1", dest="uvc_try_index1", action="store_true", help="Also try the sibling video-index1 node if index0 yields no frames")
+    p.add_argument("--no-uvc-try-index1", dest="uvc_try_index1", action="store_false", help="Do not try sibling video-index1 nodes")
+    p.set_defaults(uvc_try_index1=None)
 
-    p.add_argument("--fullscreen", action="store_true", help="Start in fullscreen (toggle with F11)")
+    p.add_argument("--fullscreen", dest="fullscreen", action="store_true", help="Start in fullscreen (toggle with F11)")
+    p.add_argument("--windowed", dest="fullscreen", action="store_false", help="Force windowed startup")
+    p.add_argument("--launcher", dest="launcher", action="store_true", help="Show the startup launcher window")
+    p.add_argument("--no-launcher", dest="launcher", action="store_false", help="Skip the startup launcher window")
+    p.set_defaults(fullscreen=None, launcher=None)
     p.add_argument("--ui-min-width", type=int, default=320, help="Minimum UI panel width (pixels)")
     p.add_argument("--ui-frac", type=float, default=0.28, help="UI width fraction of window (0..1)")
     return p.parse_args()
@@ -4428,6 +4723,14 @@ def draw_subject_modal(screen, subject_text, step_index, allow_advance):
 # ─────────────────────────────────────────────────────────────────────────────
 def main():
     args = parse_args()
+    startup_settings = load_settings()
+    args = _resolve_startup_args(args, startup_settings)
+    if args.launcher:
+        launched = show_startup_launcher(args)
+        if launched is None:
+            return
+        args = launched
+    _persist_startup_args(startup_settings, args)
 
     # ─────────────────────────────────────────────────────────────
     # Serial → Arduino plunger bridge
@@ -4470,28 +4773,30 @@ def main():
         uvc1_path = args.uvc1 or ""
         uvc2_path = args.uvc2 or ""
     else:
-        cands = discover_uvc_index0(limit=4)
+        cands = discover_uvc_inventory(limit=6)
         uvc1_path = ""
         uvc2_path = ""
         if len(cands) >= 2:
             by_bus = {}
             for c in cands:
-                by_bus.setdefault(c["busnum"], []).append(c)
+                by_bus.setdefault(c["busnum"] or c["path"], []).append(c)
             if len(by_bus) >= 2:
                 buses = list(by_bus.keys())
                 pickA = by_bus[buses[0]][0]
                 pickB = by_bus[buses[1]][0]
             else:
                 pickA, pickB = cands[0], cands[1]
-            uvc1_path = pickA["bypath"]
-            uvc2_path = pickB["bypath"]
+            uvc1_path = pickA["path"]
+            uvc2_path = pickB["path"]
             print("[UVC auto-pick]")
-            print(f"  Cam1: {pickA['bypath']} -> {pickA['node']}  {pickA['name']}  bus={pickA['busnum']} devpath={pickA['devpath']}")
-            print(f"  Cam2: {pickB['bypath']} -> {pickB['node']}  {pickB['name']}  bus={pickB['busnum']} devpath={pickB['devpath']}")
+            print(f"  Cam1: {_format_uvc_inventory_label(pickA)}")
+            print(f"  Cam2: {_format_uvc_inventory_label(pickB)}")
         else:
-            autodetected = find_uvc_devices(limit=2)
-            uvc1_path = (autodetected[0] if len(autodetected) >= 1 else "")
-            uvc2_path = (autodetected[1] if len(autodetected) >= 2 else "")
+            uvc1_path = (cands[0]["path"] if len(cands) >= 1 else "")
+            uvc2_path = (cands[1]["path"] if len(cands) >= 2 else "")
+            if len(cands) == 1:
+                print("[UVC auto-pick] Only one UVC camera path was detected.")
+                print(f"  Cam1: {_format_uvc_inventory_label(cands[0])}")
 
     if uvc1_path and uvc2_path and os.path.realpath(uvc1_path) == os.path.realpath(uvc2_path):
         print("[UVC] Auto-pick selected the same device twice; using a single UVC camera.")

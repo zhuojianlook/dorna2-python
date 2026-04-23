@@ -31,6 +31,10 @@ pip install . --upgrade --force-reinstall
 - `Legacy/` contains archived controller variants and older support scripts kept for reference.
 - `poses.json`, `routines.json`, `routine.txt`, and `settings.json` remain at the repository root because the active control workflow loads them from there.
 
+### Experimental Startup
+- Run `./launch_dorna_joy_control.sh` from this checkout to activate `dorna-bridge`, start the integrated launcher, and then open the control UI.
+- The launcher remembers host, fullscreen, and UVC selections in `settings.json`, and still allows manual overrides from the command line if needed.
+
 ### Getting Started
 First, import `Dorna` class from the `dorna2` module, and then create a `Dorna` object.
 ``` python
