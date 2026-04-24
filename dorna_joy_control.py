@@ -2289,8 +2289,8 @@ class RobotThread(threading.Thread):
             self.state.yaw = yaw_deg
 
         joints = self._try_get_current_joints()
-        if joints and len(joints) >= 6 and joints[5] is not None:
-            self.j5v = float(joints[5])
+        if isinstance(joints, dict) and joints.get("j5") is not None:
+            self.j5v = float(joints["j5"])
             with self.state.lock:
                 self.state.j5 = self.j5v
 
