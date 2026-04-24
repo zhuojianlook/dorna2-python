@@ -4214,7 +4214,10 @@ class RobotThread(threading.Thread):
                     self.x0 += dx
                     self.y0 += dy
                     self.z0 += dz
-                    self.live_rel_xyz_pending += np.array([dx, dy, dz], dtype=float)
+                    # Use absolute TCP targets for the main tool-axis live motion
+                    # path so release latency does not grow with queued relative
+                    # translation segments during a long hold.
+                    self.live_abs_pose_dirty = True
                     live_motion_requested = True
 
             if manual_enabled and left_stick_mode == "x":
