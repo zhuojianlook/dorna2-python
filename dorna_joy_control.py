@@ -701,14 +701,6 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": saw_amp_deg,
             "saw_freq_hz": saw_freq_hz,
             "tool_presets": norm_presets,
-            "startup_host": str(data.get("startup_host", DEFAULT_DORNA_HOST)),
-            "startup_port": int(data.get("startup_port", DEFAULT_DORNA_PORT)),
-            "startup_uvc1": str(data.get("startup_uvc1", "")),
-            "startup_uvc2": str(data.get("startup_uvc2", "")),
-            "startup_uvc_fps": int(data.get("startup_uvc_fps", DEFAULT_UVC_FPS)),
-            "startup_uvc_try_index1": bool(data.get("startup_uvc_try_index1", False)),
-            "startup_fullscreen": bool(data.get("startup_fullscreen", False)),
-            "startup_show_launcher": bool(data.get("startup_show_launcher", True)),
         }
     except Exception as e:
         print(f"⚠️ Using default settings (could not load {path}: {e})")
@@ -751,14 +743,6 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": 3.0,
             "saw_freq_hz": 1.0,
             "tool_presets": [],
-            "startup_host": DEFAULT_DORNA_HOST,
-            "startup_port": DEFAULT_DORNA_PORT,
-            "startup_uvc1": "",
-            "startup_uvc2": "",
-            "startup_uvc_fps": DEFAULT_UVC_FPS,
-            "startup_uvc_try_index1": False,
-            "startup_fullscreen": False,
-            "startup_show_launcher": True,
         }
 
 
@@ -2248,6 +2232,7 @@ class RobotThread(threading.Thread):
         self.saw_prev_offset = 0.0
         self.saw_phase = 0.0
         self.saw_last_t = time.time()
+        self.live_motion_active = False
 
     def _play_live(self, cmd: dict):
         """
@@ -2255,6 +2240,12 @@ class RobotThread(threading.Thread):
         Blocking on every incremental joystick move adds visible control lag.
         """
         return self.robot.play_dict(cmd, timeout=0)
+
+    def _halt_live_motion(self):
+        try:
+            self.robot.play_dict({"cmd": "halt"}, timeout=0)
+        except Exception:
+            pass
 
     def _set_current_named(self, name: str | None):
         self.current_named = name
@@ -3062,9 +3053,12 @@ class RobotThread(threading.Thread):
         control_hz = 60.0
         next_t = time.time()
         joint_poll_time = 0.0
+        last_control_t = time.time()
 
         while not self.stop_event.is_set():
             now = time.time()
+            loop_dt = min(0.05, max(1.0 / control_hz, now - last_control_t))
+            last_control_t = now
             if now < next_t:
                 time.sleep(next_t - now)
             next_t += 1 / control_hz
@@ -3685,29 +3679,34 @@ class RobotThread(threading.Thread):
 
             sx, sj5, sb, sc, sh = (5.0*sens, 5.0*sens, 0.5*sens, 0.5*sens, 5.0*sens)
             manual_enabled = (time.time() >= self.skip_manual_until) and (not waiting)
+            live_motion_cmd_sent = False
 
             if manual_enabled and abs(ly) > self.DZ:
                 if abs(ly) >= abs(lx):
-                    d = -ly * sx
+                    d = -ly * sx * loop_dt
                     tz = self.R[:,2]
                     dx = tz[0] * d
                     dy = tz[1] * d
                     dz = tz[2] * d
-                    self._play_live({"cmd":"lmove","rel":1,
-                                     "x":dx,"y":dy,"z":dz,
-                                     "vel":self.VT,"cont":1})
-                    self.x0 += dx
-                    self.y0 += dy
-                    self.z0 += dz
+                    if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
+                        self._play_live({"cmd":"lmove","rel":1,
+                                         "x":dx,"y":dy,"z":dz,
+                                         "vel":self.VT,"cont":1})
+                        self.x0 += dx
+                        self.y0 += dy
+                        self.z0 += dz
+                        live_motion_cmd_sent = True
 
             if manual_enabled and abs(lx) > self.DZ and abs(lx) > abs(ly):
-                delta = lx * sj5
-                self.j5v += delta
-                self.R = self.R @ axis_angle_to_R(0, 0, delta)
-                self.R = orthonormalize_R(self.R)
-                self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
-                with self.state.lock:
-                    self.state.j5 = self.j5v
+                delta = lx * sj5 * loop_dt
+                if abs(delta) > 1e-9:
+                    self.j5v += delta
+                    self.R = self.R @ axis_angle_to_R(0, 0, delta)
+                    self.R = orthonormalize_R(self.R)
+                    self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
+                    with self.state.lock:
+                        self.state.j5 = self.j5v
+                    live_motion_cmd_sent = True
 
             moved = False
             if manual_enabled:
@@ -3715,11 +3714,11 @@ class RobotThread(threading.Thread):
                 rx_eff = -rx if at_default else rx
                 ry_eff = ry
                 if abs(rx_eff) > self.DZ:
-                    self.R = axis_angle_to_R(0, 0, -rx_eff*sc) @ self.R
+                    self.R = axis_angle_to_R(0, 0, -rx_eff * sc * loop_dt) @ self.R
                     self.R = orthonormalize_R(self.R)
                     moved = True
                 if abs(ry_eff) > self.DZ:
-                    self.R = self.R @ axis_angle_to_R(0, ry_eff*sb, 0)
+                    self.R = self.R @ axis_angle_to_R(0, ry_eff * sb * loop_dt, 0)
                     self.R = orthonormalize_R(self.R)
                     moved = True
 
@@ -3734,6 +3733,7 @@ class RobotThread(threading.Thread):
                 with self.state.lock:
                     self.state.pitch = pitch
                     self.state.yaw = yaw_deg
+                live_motion_cmd_sent = True
 
             if manual_enabled:
                 tz = self.R[:,2]
@@ -3744,21 +3744,25 @@ class RobotThread(threading.Thread):
                 at_default = (self.current_named == "Default")
 
                 if hy != 0:
-                    step = float(hy) * sh * DPAD_Z_SIGN
+                    step = float(hy) * sh * DPAD_Z_SIGN * loop_dt
                     if at_default:
-                        self._play_live({"cmd":"lmove","rel":1,
-                                         "x":0.0,"y":0.0,"z":step,
-                                         "vel":self.VT,"cont":1})
-                        self.z0 += step
+                        if abs(step) > 1e-9:
+                            self._play_live({"cmd":"lmove","rel":1,
+                                             "x":0.0,"y":0.0,"z":step,
+                                             "vel":self.VT,"cont":1})
+                            self.z0 += step
+                            live_motion_cmd_sent = True
                     else:
                         up_axis = tx if abs(tx[2]) >= abs(ty[2]) else ty
                         dx, dy, dz = up_axis[0]*step, up_axis[1]*step, up_axis[2]*step
-                        self._play_live({"cmd":"lmove","rel":1,
-                                         "x":dx,"y":dy,"z":dz,
-                                         "vel":self.VT,"cont":1})
-                        self.x0 += dx
-                        self.y0 += dy
-                        self.z0 += dz
+                        if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
+                            self._play_live({"cmd":"lmove","rel":1,
+                                             "x":dx,"y":dy,"z":dz,
+                                             "vel":self.VT,"cont":1})
+                            self.x0 += dx
+                            self.y0 += dy
+                            self.z0 += dz
+                            live_motion_cmd_sent = True
 
                 hx_eff = -hx
                 if hx_eff != 0:
@@ -3766,12 +3770,14 @@ class RobotThread(threading.Thread):
                         perp = np.array([-proj[1], proj[0], 0.0]) / n * hx_eff
                     else:
                         perp = np.array([0.0, -hx_eff, 0.0])
-                    dx, dy = perp[0]*sh, perp[1]*sh
-                    self._play_live({"cmd":"lmove","rel":1,
-                                     "x":dx,"y":dy,"z":0.0,
-                                     "vel":self.VT,"cont":1})
-                    self.x0 += dx
-                    self.y0 += dy
+                    dx, dy = perp[0] * sh * loop_dt, perp[1] * sh * loop_dt
+                    if abs(dx) > 1e-9 or abs(dy) > 1e-9:
+                        self._play_live({"cmd":"lmove","rel":1,
+                                         "x":dx,"y":dy,"z":0.0,
+                                         "vel":self.VT,"cont":1})
+                        self.x0 += dx
+                        self.y0 += dy
+                        live_motion_cmd_sent = True
 
             # Sawing motion around J5 during injection (if enabled)
             with self.state.lock:
@@ -3800,11 +3806,21 @@ class RobotThread(threading.Thread):
                         pass
                     with self.state.lock:
                         self.state.j5 = self.j5v
+                    live_motion_cmd_sent = True
             else:
                 # Reset so next enable starts relative to current pose
                 self.saw_prev_offset = 0.0
                 self.saw_phase = 0.0
                 self.saw_last_t = time.time()
+
+            if manual_enabled:
+                if live_motion_cmd_sent:
+                    self.live_motion_active = True
+                elif self.live_motion_active:
+                    self._halt_live_motion()
+                    self.live_motion_active = False
+            else:
+                self.live_motion_active = False
 
             # Periodic pose refresh to keep pitch/yaw live
             if time.time() - self.last_pose_refresh >= 0.2:
@@ -6911,8 +6927,8 @@ def main():
 
         texts = [
             vf_.render(f"Sensitivity ({sens*100:.0f}%)", True, (200, 230, 255)),
-            vf_.render(f"Move step:  ±{(5.0 * sens):.5f} mm", True, (0, 255, 127)),
-            vf_.render(f"Angle step: ±{(5.0 * sens):.5f}°", True, (0, 255, 127)),
+            vf_.render(f"Move speed: ±{(5.0 * sens):.3f} mm/s", True, (0, 255, 127)),
+            vf_.render(f"J5 speed:   ±{(5.0 * sens):.3f} deg/s", True, (0, 255, 127)),
             vf_.render(f"Approach: {approach_mm:.2f} mm", True, (200, 255, 200)),
             vf_.render(f"Tool center: X={tool_cx:.3f} Y={tool_cy:.3f} LZ={tool_lz:.2f}", True, (220, 240, 255)),
             vf_.render(f"Saw: {'ON' if saw_enabled_flag else 'OFF'} amp={saw_amp_deg:.2f}° freq={saw_freq_hz:.2f} Hz", True, (255, 220, 200)),
