@@ -2363,8 +2363,8 @@ class SharedState:
         self.hx = self.hy = 0
         self.lb = self.rb = False
 
-        # Sensitivity levels (LB/RB to change)
-        self.levels = [0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.0, 2.0]
+        # Manual speed scale levels (LB/RB to change)
+        self.levels = [0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
         self.idx = self.levels.index(1.0)  # 100%
 
         # Tool attitude
@@ -6866,7 +6866,7 @@ def main():
             state.hx, state.hy = raw_hx, raw_hy
             state.lb, state.rb = lb, rb
 
-        # Sensitivity change via LB/RB on press
+        # Manual speed scale change via LB/RB on press
         lb_edge = lb and not prev_lb
         rb_edge = rb and not prev_rb
         with state.lock:
@@ -7462,7 +7462,7 @@ def main():
         )
 
         texts = [
-            vf_.render(f"Sensitivity ({sens*100:.0f}%)", True, (200, 230, 255)),
+            vf_.render(f"Manual speed scale ({sens*100:.0f}%)", True, (200, 230, 255)),
             vf_.render(f"Move speed: ±{(5.0 * sens):.3f} mm/s", True, (0, 255, 127)),
             vf_.render(f"J5 speed:   ±{(5.0 * sens):.3f} deg/s", True, (0, 255, 127)),
             vf_.render(f"Approach: {approach_mm:.2f} mm", True, (200, 255, 200)),
