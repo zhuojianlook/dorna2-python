@@ -2247,12 +2247,14 @@ class RobotThread(threading.Thread):
         self.saw_last_t = time.time()
         self.live_motion_active = False
         self.live_lmove_dirty = False
+        self.live_abs_pose_dirty = False
         self.live_rel_xyz_pending = np.zeros(3, dtype=float)
         self.live_rel_abc_pending = np.zeros(3, dtype=float)
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 40.0
         self.live_next_send_t = 0.0
         self.live_last_send_t = 0.0
+        self.live_last_abs_pose = None
         self.live_halt_accel = 8.0
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
@@ -2342,6 +2344,7 @@ class RobotThread(threading.Thread):
         x, y, z, a, b, c = [float(v) for v in stop_pose]
         self.x0, self.y0, self.z0 = x, y, z
         self.R = axis_angle_to_R(a, b, c)
+        self.live_last_abs_pose = (x, y, z, a, b, c)
 
         tz = self.R[:,2]
         pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
@@ -2358,11 +2361,13 @@ class RobotThread(threading.Thread):
 
     def _reset_live_motion_pending(self):
         self.live_lmove_dirty = False
+        self.live_abs_pose_dirty = False
         self.live_rel_xyz_pending.fill(0.0)
         self.live_rel_abc_pending.fill(0.0)
         self.live_j5_pending = 0.0
         self.live_next_send_t = 0.0
         self.live_last_send_t = 0.0
+        self.live_last_abs_pose = None
 
     def _flush_live_motion(self, now_t: float):
         if now_t < self.live_next_send_t:
@@ -2373,15 +2378,55 @@ class RobotThread(threading.Thread):
         if self.live_last_send_t > 0.0:
             segment_dt = max(1e-3, now_t - self.live_last_send_t)
 
+        if self.live_abs_pose_dirty and abs(self.live_j5_pending) > 1e-9:
+            # The cached absolute TCP pose already includes this tool-axis change.
+            self.live_j5_pending = 0.0
+
         if abs(self.live_j5_pending) > 1e-9:
             delta = self.live_j5_pending
             self.live_j5_pending = 0.0
             self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
             sent = True
 
+        if self.live_abs_pose_dirty:
+            a1, b1, c1 = R_to_axis_angle(self.R)
+            pose_now = (float(self.x0), float(self.y0), float(self.z0), float(a1), float(b1), float(c1))
+            if self.live_last_abs_pose is None:
+                linear_delta = 0.0
+                angular_delta = 0.0
+            else:
+                prev = np.array(self.live_last_abs_pose, dtype=float)
+                cur = np.array(pose_now, dtype=float)
+                linear_delta = float(np.linalg.norm(cur[:3] - prev[:3]))
+                angular_delta = float(np.linalg.norm(cur[3:] - prev[3:]))
+            cmd_vel = max(0.2, linear_delta / segment_dt, angular_delta / segment_dt)
+            self.live_rel_xyz_pending.fill(0.0)
+            self.live_rel_abc_pending.fill(0.0)
+            self._play_live({
+                "cmd": "lmove",
+                "rel": 0,
+                "x": pose_now[0],
+                "y": pose_now[1],
+                "z": pose_now[2],
+                "a": pose_now[3],
+                "b": pose_now[4],
+                "c": pose_now[5],
+                "vel": cmd_vel,
+                "cont": 1,
+            })
+            self.live_last_abs_pose = pose_now
+            tz = self.R[:,2]
+            pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
+            yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
+            with self.state.lock:
+                self.state.pitch = pitch
+                self.state.yaw = yaw_deg
+            self.live_abs_pose_dirty = False
+            sent = True
+
         rel_xyz_norm = np.linalg.norm(self.live_rel_xyz_pending)
         rel_abc_norm = np.linalg.norm(self.live_rel_abc_pending)
-        if rel_xyz_norm > 1e-9 or rel_abc_norm > 1e-9:
+        if (not sent) and (rel_xyz_norm > 1e-9 or rel_abc_norm > 1e-9):
             dx, dy, dz = [float(v) for v in self.live_rel_xyz_pending]
             da, db, dc = [float(v) for v in self.live_rel_abc_pending]
             self.live_rel_xyz_pending.fill(0.0)
@@ -3889,7 +3934,6 @@ class RobotThread(threading.Thread):
                     live_motion_requested = True
 
             moved = False
-            R_before_orient = self.R.copy()
             if manual_enabled:
                 at_default = (self.current_named == "Default")
                 rx_eff = -rx if at_default else rx
@@ -3906,12 +3950,7 @@ class RobotThread(threading.Thread):
                     orientation_requested = True
 
             if moved:
-                a0, b0, c0 = R_to_axis_angle(R_before_orient)
-                a1, b1, c1 = R_to_axis_angle(self.R)
-                self.live_rel_abc_pending += np.array(
-                    [a1 - a0, b1 - b0, c1 - c0],
-                    dtype=float,
-                )
+                self.live_abs_pose_dirty = True
                 live_motion_requested = True
 
             if manual_enabled:
