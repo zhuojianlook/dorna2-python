@@ -2247,8 +2247,9 @@ class RobotThread(threading.Thread):
         self.saw_last_t = time.time()
         self.live_motion_active = False
         self.live_lmove_dirty = False
+        self.live_rel_xyz_pending = np.zeros(3, dtype=float)
         self.live_j5_pending = 0.0
-        self.live_send_interval = 1.0 / 20.0
+        self.live_send_interval = 1.0 / 40.0
         self.live_next_send_t = 0.0
         self.live_halt_accel = 8.0
         self.orient_deadzone = 0.18
@@ -2355,6 +2356,7 @@ class RobotThread(threading.Thread):
 
     def _reset_live_motion_pending(self):
         self.live_lmove_dirty = False
+        self.live_rel_xyz_pending.fill(0.0)
         self.live_j5_pending = 0.0
         self.live_next_send_t = 0.0
 
@@ -2371,6 +2373,7 @@ class RobotThread(threading.Thread):
             sent = True
 
         if self.live_lmove_dirty:
+            self.live_rel_xyz_pending.fill(0.0)
             a1, b1, c1 = R_to_axis_angle(self.R)
             self._play_live({
                 "cmd": "lmove",
@@ -2391,6 +2394,25 @@ class RobotThread(threading.Thread):
                 self.state.pitch = pitch
                 self.state.yaw = yaw_deg
             self.live_lmove_dirty = False
+            sent = True
+        elif np.linalg.norm(self.live_rel_xyz_pending) > 1e-9:
+            dx, dy, dz = [float(v) for v in self.live_rel_xyz_pending]
+            self.live_rel_xyz_pending.fill(0.0)
+            self._play_live({
+                "cmd": "lmove",
+                "rel": 1,
+                "x": dx,
+                "y": dy,
+                "z": dz,
+                "vel": self.VT,
+                "cont": 1,
+            })
+            tz = self.R[:,2]
+            pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
+            yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
+            with self.state.lock:
+                self.state.pitch = pitch
+                self.state.yaw = yaw_deg
             sent = True
 
         if sent:
@@ -3858,7 +3880,7 @@ class RobotThread(threading.Thread):
                     self.x0 += dx
                     self.y0 += dy
                     self.z0 += dz
-                    lmove_changed = True
+                    self.live_rel_xyz_pending += np.array([dx, dy, dz], dtype=float)
                     live_motion_requested = True
 
             if manual_enabled and left_stick_mode == "x":
