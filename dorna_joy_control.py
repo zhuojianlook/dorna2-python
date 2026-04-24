@@ -2233,6 +2233,10 @@ class RobotThread(threading.Thread):
         self.saw_phase = 0.0
         self.saw_last_t = time.time()
         self.live_motion_active = False
+        self.live_lmove_dirty = False
+        self.live_j5_pending = 0.0
+        self.live_send_interval = 1.0 / 20.0
+        self.live_next_send_t = 0.0
 
     def _play_live(self, cmd: dict):
         """
@@ -2243,9 +2247,54 @@ class RobotThread(threading.Thread):
 
     def _halt_live_motion(self):
         try:
-            self.robot.play_dict({"cmd": "halt"}, timeout=0)
+            self.robot.halt(accel=5, timeout=0)
         except Exception:
             pass
+
+    def _reset_live_motion_pending(self):
+        self.live_lmove_dirty = False
+        self.live_j5_pending = 0.0
+        self.live_next_send_t = 0.0
+
+    def _flush_live_motion(self, now_t: float):
+        if now_t < self.live_next_send_t:
+            return False
+
+        sent = False
+
+        if abs(self.live_j5_pending) > 1e-9:
+            delta = self.live_j5_pending
+            self.live_j5_pending = 0.0
+            self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
+            sent = True
+
+        if self.live_lmove_dirty:
+            a1, b1, c1 = R_to_axis_angle(self.R)
+            self._play_live({
+                "cmd": "lmove",
+                "rel": 0,
+                "x": self.x0,
+                "y": self.y0,
+                "z": self.z0,
+                "a": a1,
+                "b": b1,
+                "c": c1,
+                "vel": self.VR,
+                "cont": 1,
+            })
+            tz = self.R[:,2]
+            pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
+            yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
+            with self.state.lock:
+                self.state.pitch = pitch
+                self.state.yaw = yaw_deg
+            self.live_lmove_dirty = False
+            sent = True
+
+        if sent:
+            self.live_next_send_t = now_t + self.live_send_interval
+
+        return sent
 
     def _set_current_named(self, name: str | None):
         self.current_named = name
@@ -3680,6 +3729,8 @@ class RobotThread(threading.Thread):
             sx, sj5, sb, sc, sh = (5.0*sens, 5.0*sens, 0.5*sens, 0.5*sens, 5.0*sens)
             manual_enabled = (time.time() >= self.skip_manual_until) and (not waiting)
             live_motion_cmd_sent = False
+            live_motion_requested = False
+            lmove_changed = False
 
             if manual_enabled and abs(ly) > self.DZ:
                 if abs(ly) >= abs(lx):
@@ -3689,13 +3740,11 @@ class RobotThread(threading.Thread):
                     dy = tz[1] * d
                     dz = tz[2] * d
                     if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
-                        self._play_live({"cmd":"lmove","rel":1,
-                                         "x":dx,"y":dy,"z":dz,
-                                         "vel":self.VT,"cont":1})
                         self.x0 += dx
                         self.y0 += dy
                         self.z0 += dz
-                        live_motion_cmd_sent = True
+                        lmove_changed = True
+                        live_motion_requested = True
 
             if manual_enabled and abs(lx) > self.DZ and abs(lx) > abs(ly):
                 delta = lx * sj5 * loop_dt
@@ -3703,10 +3752,10 @@ class RobotThread(threading.Thread):
                     self.j5v += delta
                     self.R = self.R @ axis_angle_to_R(0, 0, delta)
                     self.R = orthonormalize_R(self.R)
-                    self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
+                    self.live_j5_pending += delta
                     with self.state.lock:
                         self.state.j5 = self.j5v
-                    live_motion_cmd_sent = True
+                    live_motion_requested = True
 
             moved = False
             if manual_enabled:
@@ -3723,17 +3772,8 @@ class RobotThread(threading.Thread):
                     moved = True
 
             if moved:
-                a1,b1,c1 = R_to_axis_angle(self.R)
-                self._play_live({"cmd":"lmove","rel":0,
-                                 "x":self.x0,"y":self.y0,"z":self.z0,
-                                 "a":a1,"b":b1,"c":c1,"vel":self.VR,"cont":1})
-                tz = self.R[:,2]
-                pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
-                yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
-                with self.state.lock:
-                    self.state.pitch = pitch
-                    self.state.yaw = yaw_deg
-                live_motion_cmd_sent = True
+                lmove_changed = True
+                live_motion_requested = True
 
             if manual_enabled:
                 tz = self.R[:,2]
@@ -3747,22 +3787,18 @@ class RobotThread(threading.Thread):
                     step = float(hy) * sh * DPAD_Z_SIGN * loop_dt
                     if at_default:
                         if abs(step) > 1e-9:
-                            self._play_live({"cmd":"lmove","rel":1,
-                                             "x":0.0,"y":0.0,"z":step,
-                                             "vel":self.VT,"cont":1})
                             self.z0 += step
-                            live_motion_cmd_sent = True
+                            lmove_changed = True
+                            live_motion_requested = True
                     else:
                         up_axis = tx if abs(tx[2]) >= abs(ty[2]) else ty
                         dx, dy, dz = up_axis[0]*step, up_axis[1]*step, up_axis[2]*step
                         if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
-                            self._play_live({"cmd":"lmove","rel":1,
-                                             "x":dx,"y":dy,"z":dz,
-                                             "vel":self.VT,"cont":1})
                             self.x0 += dx
                             self.y0 += dy
                             self.z0 += dz
-                            live_motion_cmd_sent = True
+                            lmove_changed = True
+                            live_motion_requested = True
 
                 hx_eff = -hx
                 if hx_eff != 0:
@@ -3772,12 +3808,13 @@ class RobotThread(threading.Thread):
                         perp = np.array([0.0, -hx_eff, 0.0])
                     dx, dy = perp[0] * sh * loop_dt, perp[1] * sh * loop_dt
                     if abs(dx) > 1e-9 or abs(dy) > 1e-9:
-                        self._play_live({"cmd":"lmove","rel":1,
-                                         "x":dx,"y":dy,"z":0.0,
-                                         "vel":self.VT,"cont":1})
                         self.x0 += dx
                         self.y0 += dy
-                        live_motion_cmd_sent = True
+                        lmove_changed = True
+                        live_motion_requested = True
+
+            if lmove_changed:
+                self.live_lmove_dirty = True
 
             # Sawing motion around J5 during injection (if enabled)
             with self.state.lock:
@@ -3800,26 +3837,32 @@ class RobotThread(threading.Thread):
                     self.j5v += delta
                     self.R = self.R @ axis_angle_to_R(0, 0, delta)
                     self.R = orthonormalize_R(self.R)
-                    try:
-                        self._play_live({"cmd": "jmove", "rel": 1, "j5": delta, "vel": self.VR, "cont": 1})
-                    except Exception:
-                        pass
+                    self.live_j5_pending += delta
                     with self.state.lock:
                         self.state.j5 = self.j5v
-                    live_motion_cmd_sent = True
+                    live_motion_requested = True
             else:
                 # Reset so next enable starts relative to current pose
                 self.saw_prev_offset = 0.0
                 self.saw_phase = 0.0
                 self.saw_last_t = time.time()
 
+            if live_motion_requested:
+                try:
+                    live_motion_cmd_sent = self._flush_live_motion(now)
+                except Exception:
+                    pass
+
             if manual_enabled:
-                if live_motion_cmd_sent:
+                if live_motion_requested or live_motion_cmd_sent:
                     self.live_motion_active = True
                 elif self.live_motion_active:
+                    self._reset_live_motion_pending()
                     self._halt_live_motion()
                     self.live_motion_active = False
+                    self.last_pose_refresh = 0.0
             else:
+                self._reset_live_motion_pending()
                 self.live_motion_active = False
 
             # Periodic pose refresh to keep pitch/yaw live
