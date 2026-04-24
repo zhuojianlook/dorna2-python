@@ -739,6 +739,8 @@ DEFAULT_TOOL_CX     = 0.0
 DEFAULT_TOOL_CY     = 0.0
 DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
+COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
+COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
 
 DEFAULT_POSES = {
     "Reload":  {"j0": 7.71, "j1": 80.86, "j2": -100.00, "j3": -0.07, "j4": -70.60, "j5": 6.35},
@@ -748,6 +750,66 @@ RESERVED_POSES = {"Default", "Reload"}
 
 def midway_name(name: str) -> str:
     return f"{name}{MIDWAY_SUFFIX}"
+
+def _normalize_axis_range(raw):
+    if isinstance(raw, dict):
+        if "min" in raw and "max" in raw:
+            try:
+                lo = float(raw["min"])
+                hi = float(raw["max"])
+                return (min(lo, hi), max(lo, hi))
+            except Exception:
+                return None
+        return None
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        try:
+            lo = float(raw[0])
+            hi = float(raw[1])
+            return (min(lo, hi), max(lo, hi))
+        except Exception:
+            return None
+    return None
+
+def _extract_collision_ranges(container, axes):
+    if not isinstance(container, dict):
+        return {}
+    out = {}
+    for axis in axes:
+        rng = None
+        if axis in container:
+            rng = _normalize_axis_range(container.get(axis))
+        if rng is None and f"{axis}_range" in container:
+            rng = _normalize_axis_range(container.get(f"{axis}_range"))
+        if rng is None and f"{axis}_min" in container and f"{axis}_max" in container:
+            rng = _normalize_axis_range([container.get(f"{axis}_min"), container.get(f"{axis}_max")])
+        if rng is not None:
+            out[axis] = rng
+    return out
+
+def _normalize_collision_zones(raw_zones):
+    zones = []
+    if not isinstance(raw_zones, list):
+        return zones
+
+    for idx, raw in enumerate(raw_zones, start=1):
+        if not isinstance(raw, dict):
+            continue
+
+        joint_src = raw.get("joints", raw.get("joint_ranges", raw))
+        tcp_src = raw.get("tcp", raw.get("tcp_ranges", raw))
+        joint_ranges = _extract_collision_ranges(joint_src, COLLISION_JOINT_AXES)
+        tcp_ranges = _extract_collision_ranges(tcp_src, COLLISION_TCP_AXES)
+        if not joint_ranges and not tcp_ranges:
+            continue
+
+        zones.append({
+            "name": str(raw.get("name") or f"zone_{idx}"),
+            "enabled": bool(raw.get("enabled", True)),
+            "joint_ranges": joint_ranges,
+            "tcp_ranges": tcp_ranges,
+        })
+
+    return zones
 
 def load_poses(path=POSES_PATH):
     try:
@@ -862,6 +924,8 @@ def load_settings(path=SETTINGS_PATH):
             if nm:
                 norm_presets.append({"name": nm, "lz": lz_p, "cx": cx_p, "cy": cy_p})
 
+        collision_zones = _normalize_collision_zones(data.get("collision_zones", []))
+
         return {
             "tool_lz": tool_lz,
             "tool_cx": tool_cx,
@@ -901,6 +965,7 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": saw_amp_deg,
             "saw_freq_hz": saw_freq_hz,
             "tool_presets": norm_presets,
+            "collision_zones": collision_zones,
         }
     except Exception as e:
         print(f"⚠️ Using default settings (could not load {path}: {e})")
@@ -943,6 +1008,7 @@ def load_settings(path=SETTINGS_PATH):
             "saw_amp_deg": 3.0,
             "saw_freq_hz": 1.0,
             "tool_presets": [],
+            "collision_zones": [],
         }
 
 
@@ -2535,6 +2601,8 @@ class RobotThread(threading.Thread):
         self.live_halt_accel = 8.0
         self.live_halt_accel_translation = 12.0
         self.live_last_motion_mode = None
+        self.last_collision_zone = ""
+        self.last_collision_t = 0.0
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
         self.last_j4_poll_t = None
@@ -2555,6 +2623,140 @@ class RobotThread(threading.Thread):
             self.robot.halt(accel=accel, timeout=0)
         except Exception:
             pass
+
+    def _collision_print(self, zone_name: str, context: str):
+        zone_name = str(zone_name or "unnamed")
+        now = time.time()
+        if zone_name == self.last_collision_zone and (now - self.last_collision_t) < 0.5:
+            return
+        self.last_collision_zone = zone_name
+        self.last_collision_t = now
+        print(f"[Collision] Blocked {context}: zone '{zone_name}'")
+
+    def _dict_in_ranges(self, values: dict, ranges: dict) -> bool:
+        for axis, bounds in (ranges or {}).items():
+            if axis not in values or values[axis] is None:
+                return False
+            lo, hi = bounds
+            val = float(values[axis])
+            if val < lo or val > hi:
+                return False
+        return True
+
+    def _joint_dict_to_list(self, joints: dict):
+        if not isinstance(joints, dict):
+            return None
+        try:
+            return [float(joints[f"j{i}"]) for i in range(6)]
+        except Exception:
+            return None
+
+    def _tcp_pose_from_joint_dict(self, joints: dict):
+        joint_list = self._joint_dict_to_list(joints)
+        if joint_list is None:
+            return None
+        try:
+            T_flange = np.array(self.robot.kinematic.t_flange_r_world(joint=joint_list))
+            T_tcp = T_flange @ self.robot.kinematic.T_tcp_r_flange
+            xyzabc = self.robot.kinematic.mat_to_xyzabc(T_tcp)
+            return tuple(float(v) for v in xyzabc[:6])
+        except Exception:
+            return None
+
+    def _solve_joints_for_tcp_pose(self, tcp_pose):
+        if not tcp_pose:
+            return None
+        current = self._try_get_current_joints()
+        current_list = self._joint_dict_to_list(current) or [0.0] * 6
+        try:
+            sols = self.robot.kinematic.inv(list(tcp_pose), joint_current=current_list, all_sol=True)
+        except Exception:
+            return None
+        if sols is None:
+            return None
+        if isinstance(sols, np.ndarray):
+            if sols.ndim == 1:
+                sols_iter = [sols.tolist()]
+            else:
+                sols_iter = sols.tolist()
+        else:
+            sols_iter = list(sols)
+        best = None
+        best_cost = None
+        for sol in sols_iter:
+            try:
+                sol_list = [float(v) for v in list(sol)[:6]]
+            except Exception:
+                continue
+            if len(sol_list) < 6:
+                continue
+            cost = float(np.linalg.norm(np.array(sol_list) - np.array(current_list)))
+            if best is None or cost < best_cost:
+                best = sol_list
+                best_cost = cost
+        if best is None:
+            return None
+        return {f"j{i}": best[i] for i in range(6)}
+
+    def _merge_joint_target(self, joint_update: dict):
+        base = self._try_get_current_joints()
+        if base is None:
+            return None
+        merged = dict(base)
+        for axis in COLLISION_JOINT_AXES:
+            if axis in joint_update:
+                try:
+                    merged[axis] = float(joint_update[axis])
+                except Exception:
+                    pass
+        return merged
+
+    def _find_collision_zone(self, tcp_pose=None, joints=None):
+        with self.state.lock:
+            zones = list(self.state.settings.get("collision_zones", []))
+        zones = [z for z in zones if isinstance(z, dict) and z.get("enabled", True)]
+        if not zones:
+            return None
+
+        need_tcp = any(z.get("tcp_ranges") for z in zones)
+        need_joints = any(z.get("joint_ranges") for z in zones)
+        resolved_tcp = tuple(float(v) for v in tcp_pose[:6]) if tcp_pose is not None else None
+        resolved_joints = dict(joints) if isinstance(joints, dict) else None
+
+        if need_tcp and resolved_tcp is None and resolved_joints is not None:
+            resolved_tcp = self._tcp_pose_from_joint_dict(resolved_joints)
+        if need_joints and resolved_joints is None and resolved_tcp is not None:
+            resolved_joints = self._solve_joints_for_tcp_pose(resolved_tcp)
+
+        tcp_values = None
+        if resolved_tcp is not None:
+            tcp_values = {axis: resolved_tcp[i] for i, axis in enumerate(COLLISION_TCP_AXES)}
+
+        for zone in zones:
+            joint_ranges = zone.get("joint_ranges", {})
+            tcp_ranges = zone.get("tcp_ranges", {})
+            if tcp_ranges:
+                if tcp_values is None or not self._dict_in_ranges(tcp_values, tcp_ranges):
+                    continue
+            if joint_ranges:
+                if resolved_joints is None or not self._dict_in_ranges(resolved_joints, joint_ranges):
+                    continue
+            return str(zone.get("name") or "unnamed")
+        return None
+
+    def _guard_tcp_target(self, tcp_pose, context: str):
+        zone = self._find_collision_zone(tcp_pose=tcp_pose)
+        if zone:
+            self._collision_print(zone, context)
+            return False
+        return True
+
+    def _guard_joint_target(self, joint_target: dict, context: str):
+        zone = self._find_collision_zone(joints=joint_target)
+        if zone:
+            self._collision_print(zone, context)
+            return False
+        return True
 
     def _preprocess_left_stick(self, lx: float, ly: float):
         lx = _apply_deadzone(lx, self.left_stick_deadzone)
@@ -2675,6 +2877,12 @@ class RobotThread(threading.Thread):
 
         if abs(self.live_j5_pending) > self.live_j5_epsilon:
             delta = self.live_j5_pending
+            j_target = self._merge_joint_target({"j5": self.j5v})
+            if j_target is not None and not self._guard_joint_target(j_target, "live J5 motion"):
+                self.live_j5_pending = 0.0
+                self._reset_live_motion_pending()
+                self._soft_stop_live_motion()
+                return True
             self.live_j5_pending = 0.0
             self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
             sent = True
@@ -2682,6 +2890,10 @@ class RobotThread(threading.Thread):
         if self.live_abs_pose_dirty:
             a1, b1, c1 = R_to_axis_angle(self.R)
             pose_now = (float(self.x0), float(self.y0), float(self.z0), float(a1), float(b1), float(c1))
+            if not self._guard_tcp_target(pose_now, "live TCP motion"):
+                self._reset_live_motion_pending()
+                self._soft_stop_live_motion()
+                return True
             if self.live_last_abs_pose is None:
                 linear_delta = 0.0
                 angular_delta = 0.0
@@ -2729,6 +2941,12 @@ class RobotThread(threading.Thread):
                 or rel_abc_norm >= self.live_angular_epsilon
             )
         ):
+            a1, b1, c1 = R_to_axis_angle(self.R)
+            pose_now = (float(self.x0), float(self.y0), float(self.z0), float(a1), float(b1), float(c1))
+            if not self._guard_tcp_target(pose_now, "live TCP motion"):
+                self._reset_live_motion_pending()
+                self._soft_stop_live_motion()
+                return True
             dx, dy, dz = [float(v) for v in self.live_rel_xyz_pending]
             da, db, dc = [float(v) for v in self.live_rel_abc_pending]
             self.live_rel_xyz_pending.fill(0.0)
@@ -2790,6 +3008,10 @@ class RobotThread(threading.Thread):
             )
 
     def _queue_jmove_to_pose(self, pose: dict):
+        target_joints = {axis: pose[axis] for axis in COLLISION_JOINT_AXES if axis in pose}
+        merged_target = self._merge_joint_target(target_joints)
+        if merged_target is not None and not self._guard_joint_target(merged_target, "joint move"):
+            return False
         go = {"cmd":"jmove","rel":0,"vel":self.VR_POSE}
         go.update(pose)
         self.robot.play_dict(go)
@@ -2804,6 +3026,7 @@ class RobotThread(threading.Thread):
                 self.j5v = float(pose["j5"])
         except Exception:
             pass
+        return True
 
     def tool_center_spin_demo(self, sweep_deg=360.0, steps=24, dwell=0.15):
         joints = self._try_get_current_joints()
@@ -3373,12 +3596,20 @@ class RobotThread(threading.Thread):
             pass
         tz = self.R[:,2]
         dx, dy, dz = tz[0]*dist_mm, tz[1]*dist_mm, tz[2]*dist_mm
+        a_deg, b_deg, c_deg = R_to_axis_angle(self.R)
+        target_pose = (
+            float(self.x0 + dx), float(self.y0 + dy), float(self.z0 + dz),
+            float(a_deg), float(b_deg), float(c_deg),
+        )
+        if not self._guard_tcp_target(target_pose, "tool-axis move"):
+            return False
         self.robot.play_dict({"cmd":"lmove","rel":1,"x":dx,"y":dy,"z":dz,"vel":self.VT,"cont":cont})
         self.x0 += dx
         self.y0 += dy
         self.z0 += dz
         seconds = abs(dist_mm) / max(1e-6, self.VT) + 0.15
         self._mark_motion_for(seconds)
+        return True
 
     def _capture_tcp_pose(self):
         """Return current TCP pose (world frame) as tuple (x,y,z,a,b,c)."""
@@ -3406,9 +3637,11 @@ class RobotThread(threading.Thread):
     def _move_tcp_to_pose(self, pose):
         """Command robot to an absolute TCP pose and update cached state."""
         if not pose:
-            return
+            return False
         try:
             x, y, z, a, b, c = pose
+            if not self._guard_tcp_target((x, y, z, a, b, c), "TCP move"):
+                return False
             self.robot.play_dict({
                 "cmd": "lmove",
                 "rel": 0,
@@ -3423,8 +3656,10 @@ class RobotThread(threading.Thread):
             self.x0, self.y0, self.z0 = x, y, z
             self.R = axis_angle_to_R(a, b, c)
             self._mark_motion_for(0.6)
+            return True
         except Exception as e:
             print(f"⚠️ move_tcp_to_pose failed: {e}")
+            return False
 
     def _try_get_current_joints(self):
         candidates = ["get_all_joint", "get_joint", "get_joints", "joints", "get_pos"]
@@ -3470,8 +3705,12 @@ class RobotThread(threading.Thread):
             return True
 
         # Demonstration path: retract to midway and return, capturing midway joints
+        moved_demo = False
         try:
-            self._tool_move_along_tz(-approach_mm, cont=0)
+            if not self._tool_move_along_tz(-approach_mm, cont=0):
+                print(f"⚠️ Could not demonstrate midway for '{name}' because a collision zone blocked the retract.")
+                return False
+            moved_demo = True
             time.sleep(0.05)
             mid_joints = self._try_get_current_joints()
             if mid_joints is None:
@@ -3482,7 +3721,8 @@ class RobotThread(threading.Thread):
             save_poses(self.state.poses)
             print(f"[Robot] Saved '{name}' with midway via −{approach_mm} mm demonstration.")
         finally:
-            self._tool_move_along_tz(+approach_mm, cont=0)
+            if moved_demo:
+                self._tool_move_along_tz(+approach_mm, cont=0)
             self._set_current_named(name)
             print(f"[Robot] Returned to '{name}'.")
         return True
@@ -3499,12 +3739,13 @@ class RobotThread(threading.Thread):
         with self.state.lock:
             poses = self.state.poses
         if cur_mid in poses:
-            self._tool_move_along_tz(-approach_mm, cont=0)
-            self._set_current_named(cur_mid)
-            print(f"[Robot] Retracted to existing '{cur_mid}'.")
+            if self._tool_move_along_tz(-approach_mm, cont=0):
+                self._set_current_named(cur_mid)
+                print(f"[Robot] Retracted to existing '{cur_mid}'.")
             return
         print(f"[Robot] '{cur_mid}' missing; creating via −{approach_mm} mm tool-Z…")
-        self._tool_move_along_tz(-approach_mm, cont=0)
+        if not self._tool_move_along_tz(-approach_mm, cont=0):
+            return
         time.sleep(0.05)
         mid_joints = self._try_get_current_joints()
         if mid_joints is not None:
@@ -3518,7 +3759,8 @@ class RobotThread(threading.Thread):
         if self.current_named and str(self.current_named).endswith(MIDWAY_SUFFIX):
             final = self.current_named[: -len(MIDWAY_SUFFIX)]
             try:
-                self._tool_move_along_tz(+approach_mm, cont=0)
+                if not self._tool_move_along_tz(+approach_mm, cont=0):
+                    return
                 self._set_current_named(final)
                 print(f"[Robot] Advanced +{approach_mm} mm to '{final}'.")
             except Exception as e:
@@ -3550,9 +3792,11 @@ class RobotThread(threading.Thread):
         try:
             with self.state.lock:
                 default_pose = self.state.poses["Default"].copy()
-            self._queue_jmove_to_pose(default_pose)
-            self._set_current_named("Default")
-            print("[Robot] Ready at Default.")
+            if self._queue_jmove_to_pose(default_pose):
+                self._set_current_named("Default")
+                print("[Robot] Ready at Default.")
+            else:
+                print("⚠️ Default pose is inside a configured collision zone; startup move skipped.")
         except Exception as e:
             print(f"⚠️ Could not home to Default pose: {e}")
             try:
@@ -3599,9 +3843,9 @@ class RobotThread(threading.Thread):
                         if target == "Default":
                             self._ensure_current_midway(approach_mm)
                             try:
-                                self._queue_jmove_to_pose(poses["Default"])
-                                self._set_current_named("Default")
-                                print("[Robot] Moved to Default (safe retract first if needed).")
+                                if self._queue_jmove_to_pose(poses["Default"]):
+                                    self._set_current_named("Default")
+                                    print("[Robot] Moved to Default (safe retract first if needed).")
                             except Exception as e:
                                 print(f"⚠️ Failed to go to Default: {e}")
                             continue
@@ -3614,15 +3858,15 @@ class RobotThread(threading.Thread):
                             continue
 
                         try:
-                            self._queue_jmove_to_pose(poses[target_mid])
-                            self._set_current_named(target_mid)
-                            with self.state.lock:
-                                self.state.await_confirm = True
-                                self.state.await_target  = target
-                                self.state.confirm_msg   = (
-                                    f"Paused at '{target_mid}'. Press A to advance +{approach_mm} mm, or B for free control."
-                                )
-                            print(f"[Robot] Reached '{target_mid}'. Awaiting A (advance) or B (free control).")
+                            if self._queue_jmove_to_pose(poses[target_mid]):
+                                self._set_current_named(target_mid)
+                                with self.state.lock:
+                                    self.state.await_confirm = True
+                                    self.state.await_target  = target
+                                    self.state.confirm_msg   = (
+                                        f"Paused at '{target_mid}'. Press A to advance +{approach_mm} mm, or B for free control."
+                                    )
+                                print(f"[Robot] Reached '{target_mid}'. Awaiting A (advance) or B (free control).")
                         except Exception as e:
                             print(f"⚠️ Failed to go to '{target_mid}': {e}")
 
@@ -3663,9 +3907,9 @@ class RobotThread(threading.Thread):
                             self.state.await_target  = None
                             self.state.confirm_msg   = ""
                         try:
-                            self._queue_jmove_to_pose(poses[target])
-                            self._set_current_named(target)
-                            print(f"[Robot] Direct move to '{target}' (midway skipped).")
+                            if self._queue_jmove_to_pose(poses[target]):
+                                self._set_current_named(target)
+                                print(f"[Robot] Direct move to '{target}' (midway skipped).")
                         except Exception as e:
                             print(f"⚠️ Failed direct move to '{target}': {e}")
 
@@ -3760,13 +4004,8 @@ class RobotThread(threading.Thread):
                             self.R = self.R @ axis_angle_to_R(0, -delta, 0)
                             self.R = orthonormalize_R(self.R)
                             a1, b1, c1 = R_to_axis_angle(self.R)
-                            self.robot.play_dict({
-                                "cmd": "lmove", "rel": 0,
-                                "x": self.x0, "y": self.y0, "z": self.z0,
-                                "a": a1, "b": b1, "c": c1,
-                                "vel": self.VR_POSE
-                            })
-                            self._mark_motion_for(0.6)
+                            if not self._move_tcp_to_pose((self.x0, self.y0, self.z0, a1, b1, c1)):
+                                continue
                             tz_new = self.R[:,2]
                             new_pitch = -np.degrees(np.arcsin(np.clip(tz_new[2], -1, 1)))
                             with self.state.lock:
@@ -3790,13 +4029,8 @@ class RobotThread(threading.Thread):
                             self.R = axis_angle_to_R(0, 0, delta) @ self.R
                             self.R = orthonormalize_R(self.R)
                             a1, b1, c1 = R_to_axis_angle(self.R)
-                            self.robot.play_dict({
-                                "cmd": "lmove", "rel": 0,
-                                "x": self.x0, "y": self.y0, "z": self.z0,
-                                "a": a1, "b": b1, "c": c1,
-                                "vel": self.VR_POSE
-                            })
-                            self._mark_motion_for(0.6)
+                            if not self._move_tcp_to_pose((self.x0, self.y0, self.z0, a1, b1, c1)):
+                                continue
                             tz_new = self.R[:,2]
                             new_yaw = np.degrees(np.arctan2(tz_new[1], tz_new[0]))
                             with self.state.lock:
@@ -3813,6 +4047,9 @@ class RobotThread(threading.Thread):
                             continue
                         try:
                             self._refresh_from_robot()
+                            merged_target = self._merge_joint_target({"j5": target})
+                            if merged_target is not None and not self._guard_joint_target(merged_target, "absolute J5 move"):
+                                continue
                             self.robot.play_dict({"cmd": "jmove", "rel": 0, "j5": target, "vel": self.VR_POSE})
                             self._mark_motion_for(0.6)
                             time.sleep(0.05)
@@ -5864,6 +6101,7 @@ def main():
             {"label": "— Settings —", "kind": "header"},
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
+            {"label": f"Collision zones: {len(settings.get('collision_zones', []))} configured (edit settings.json)", "kind": "collision_info"},
             {"label": f"Alarm sensitivity: {state.settings.get('alarm_sensitivity', DEFAULT_ALARM_SENSITIVITY):.2f}", "kind": "alarm_sensitivity"},
             {"label": "Quit", "kind": "quit_app"},
         ]
