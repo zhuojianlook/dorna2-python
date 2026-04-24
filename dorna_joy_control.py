@@ -33,8 +33,60 @@ DATA_ROOT_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "RobotInjection
 DEFAULT_DORNA_HOST = "10.42.0.11"
 DEFAULT_DORNA_PORT = 443
 DEFAULT_UVC_FPS = 30
+DEFAULT_UVC_WIDTH = 640
+DEFAULT_UVC_HEIGHT = 480
+DEFAULT_RS_WIDTH = 640
+DEFAULT_RS_HEIGHT = 480
+DEFAULT_RS_FPS = 30
 _V4L2_CTL = shutil.which("v4l2-ctl")
 _V4L2_CAPS_CACHE = {}
+
+def _profile_label(width: int, height: int, fps: int, note: str = "") -> str:
+    label = f"{int(width)}x{int(height)} @ {int(fps)} fps"
+    if note:
+        label += f" {note}"
+    return label
+
+UVC_QUALITY_PRESETS = [
+    (_profile_label(640, 480, 30, "(Best UVC)"), (640, 480, 30)),
+    (_profile_label(640, 480, 15), (640, 480, 15)),
+    (_profile_label(320, 240, 30), (320, 240, 30)),
+    (_profile_label(320, 240, 15), (320, 240, 15)),
+]
+
+RS_QUALITY_PRESETS = [
+    (_profile_label(640, 480, 30, "(Default)"), (640, 480, 30)),
+    (_profile_label(1280, 720, 30, "(Max color/depth)"), (1280, 720, 30)),
+    (_profile_label(640, 360, 30), (640, 360, 30)),
+    (_profile_label(424, 240, 30), (424, 240, 30)),
+]
+
+def _profile_value_map(presets):
+    return {label: values for label, values in presets}
+
+def _profile_label_for_values(width: int, height: int, fps: int, presets) -> str:
+    wanted = (int(width), int(height), int(fps))
+    for label, values in presets:
+        if tuple(values) == wanted:
+            return label
+    return _profile_label(*wanted, note="(Custom)")
+
+def _profile_values_from_label(label: str, presets, fallback):
+    label = str(label or "").strip()
+    by_label = _profile_value_map(presets)
+    if label in by_label:
+        return tuple(by_label[label])
+    m = re.match(r"^\s*(\d+)\s*x\s*(\d+)\s*@\s*(\d+)\s*fps", label, re.IGNORECASE)
+    if m:
+        return tuple(int(g) for g in m.groups())
+    return tuple(int(v) for v in fallback)
+
+def _profile_choice_values(presets, current_label: str) -> list:
+    values = [label for label, _ in presets]
+    current_label = str(current_label or "").strip()
+    if current_label and current_label not in values:
+        values.append(current_label)
+    return values
 
 # ─────────────────────────────────────────────────────────────────────────────
 #                              UVC CAMERA SUPPORT
@@ -907,7 +959,12 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_port": DEFAULT_DORNA_PORT,
         "startup_uvc1": "",
         "startup_uvc2": "",
+        "startup_uvc_width": DEFAULT_UVC_WIDTH,
+        "startup_uvc_height": DEFAULT_UVC_HEIGHT,
         "startup_uvc_fps": DEFAULT_UVC_FPS,
+        "startup_rs_width": DEFAULT_RS_WIDTH,
+        "startup_rs_height": DEFAULT_RS_HEIGHT,
+        "startup_rs_fps": DEFAULT_RS_FPS,
         "startup_uvc_try_index1": False,
         "startup_fullscreen": False,
         "startup_show_launcher": True,
@@ -970,7 +1027,12 @@ def _resolve_startup_args(args, settings):
     args.port = int(args.port if args.port is not None else settings.get("startup_port", DEFAULT_DORNA_PORT))
     args.uvc1 = str(args.uvc1 or settings.get("startup_uvc1", "") or "")
     args.uvc2 = str(args.uvc2 or settings.get("startup_uvc2", "") or "")
+    args.uvc_width = int(args.uvc_width if args.uvc_width is not None else settings.get("startup_uvc_width", DEFAULT_UVC_WIDTH))
+    args.uvc_height = int(args.uvc_height if args.uvc_height is not None else settings.get("startup_uvc_height", DEFAULT_UVC_HEIGHT))
     args.uvc_fps = int(args.uvc_fps if args.uvc_fps is not None else settings.get("startup_uvc_fps", DEFAULT_UVC_FPS))
+    args.rs_width = int(args.rs_width if args.rs_width is not None else settings.get("startup_rs_width", DEFAULT_RS_WIDTH))
+    args.rs_height = int(args.rs_height if args.rs_height is not None else settings.get("startup_rs_height", DEFAULT_RS_HEIGHT))
+    args.rs_fps = int(args.rs_fps if args.rs_fps is not None else settings.get("startup_rs_fps", DEFAULT_RS_FPS))
     if args.uvc_try_index1 is None:
         args.uvc_try_index1 = bool(settings.get("startup_uvc_try_index1", False))
     if args.fullscreen is None:
@@ -984,7 +1046,12 @@ def _persist_startup_args(settings, args):
     settings["startup_port"] = int(args.port or DEFAULT_DORNA_PORT)
     settings["startup_uvc1"] = str(args.uvc1 or "")
     settings["startup_uvc2"] = str(args.uvc2 or "")
+    settings["startup_uvc_width"] = int(args.uvc_width or DEFAULT_UVC_WIDTH)
+    settings["startup_uvc_height"] = int(args.uvc_height or DEFAULT_UVC_HEIGHT)
     settings["startup_uvc_fps"] = int(args.uvc_fps or DEFAULT_UVC_FPS)
+    settings["startup_rs_width"] = int(args.rs_width or DEFAULT_RS_WIDTH)
+    settings["startup_rs_height"] = int(args.rs_height or DEFAULT_RS_HEIGHT)
+    settings["startup_rs_fps"] = int(args.rs_fps or DEFAULT_RS_FPS)
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
     settings["startup_show_launcher"] = bool(args.launcher)
@@ -1011,7 +1078,22 @@ def show_startup_launcher(args):
     port_var = tk.StringVar(value=str(args.port or DEFAULT_DORNA_PORT))
     uvc1_var = tk.StringVar(value=str(args.uvc1 or ""))
     uvc2_var = tk.StringVar(value=str(args.uvc2 or ""))
-    fps_var = tk.StringVar(value=str(args.uvc_fps or DEFAULT_UVC_FPS))
+    uvc_quality_var = tk.StringVar(
+        value=_profile_label_for_values(
+            args.uvc_width or DEFAULT_UVC_WIDTH,
+            args.uvc_height or DEFAULT_UVC_HEIGHT,
+            args.uvc_fps or DEFAULT_UVC_FPS,
+            UVC_QUALITY_PRESETS,
+        )
+    )
+    rs_quality_var = tk.StringVar(
+        value=_profile_label_for_values(
+            args.rs_width or DEFAULT_RS_WIDTH,
+            args.rs_height or DEFAULT_RS_HEIGHT,
+            args.rs_fps or DEFAULT_RS_FPS,
+            RS_QUALITY_PRESETS,
+        )
+    )
     try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
     launcher_var = tk.BooleanVar(value=bool(args.launcher))
@@ -1053,9 +1135,25 @@ def show_startup_launcher(args):
         wraplength=640,
     ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
-    ttk.Label(frame, text="UVC FPS").grid(row=6, column=0, sticky="w", pady=(10, 0))
-    fps_combo = ttk.Combobox(frame, textvariable=fps_var, values=("30", "15", "10"), width=8, state="readonly")
-    fps_combo.grid(row=6, column=1, sticky="w", padx=(8, 0), pady=(10, 0))
+    ttk.Label(frame, text="UVC quality").grid(row=6, column=0, sticky="w", pady=(10, 0))
+    uvc_quality_combo = ttk.Combobox(
+        frame,
+        textvariable=uvc_quality_var,
+        values=_profile_choice_values(UVC_QUALITY_PRESETS, uvc_quality_var.get()),
+        width=28,
+        state="readonly",
+    )
+    uvc_quality_combo.grid(row=6, column=1, sticky="w", padx=(8, 0), pady=(10, 0))
+
+    ttk.Label(frame, text="RealSense quality").grid(row=6, column=2, sticky="w", padx=(12, 0), pady=(10, 0))
+    rs_quality_combo = ttk.Combobox(
+        frame,
+        textvariable=rs_quality_var,
+        values=_profile_choice_values(RS_QUALITY_PRESETS, rs_quality_var.get()),
+        width=28,
+        state="readonly",
+    )
+    rs_quality_combo.grid(row=6, column=3, sticky="w", padx=(8, 0), pady=(10, 0))
 
     ttk.Checkbutton(frame, text="Try sibling video-index1 if index0 has no frames", variable=try_index1_var).grid(
         row=7, column=0, columnspan=4, sticky="w", pady=(8, 0)
@@ -1122,9 +1220,16 @@ def show_startup_launcher(args):
             messagebox.showerror("Invalid port", "Port must be an integer.")
             return
         try:
-            fps = int(fps_var.get().strip())
+            uvc_width, uvc_height, uvc_fps = _profile_values_from_label(
+                uvc_quality_var.get(), UVC_QUALITY_PRESETS,
+                (DEFAULT_UVC_WIDTH, DEFAULT_UVC_HEIGHT, DEFAULT_UVC_FPS),
+            )
+            rs_width, rs_height, rs_fps = _profile_values_from_label(
+                rs_quality_var.get(), RS_QUALITY_PRESETS,
+                (DEFAULT_RS_WIDTH, DEFAULT_RS_HEIGHT, DEFAULT_RS_FPS),
+            )
         except Exception:
-            messagebox.showerror("Invalid FPS", "UVC FPS must be an integer.")
+            messagebox.showerror("Invalid quality", "Choose valid UVC and RealSense quality profiles.")
             return
 
         host = host_var.get().strip() or DEFAULT_DORNA_HOST
@@ -1138,7 +1243,12 @@ def show_startup_launcher(args):
         args.port = port
         args.uvc1 = uvc1
         args.uvc2 = uvc2
-        args.uvc_fps = fps
+        args.uvc_width = uvc_width
+        args.uvc_height = uvc_height
+        args.uvc_fps = uvc_fps
+        args.rs_width = rs_width
+        args.rs_height = rs_height
+        args.rs_fps = rs_fps
         args.uvc_try_index1 = bool(try_index1_var.get())
         args.fullscreen = bool(fullscreen_var.get())
         args.launcher = bool(launcher_var.get())
@@ -2105,7 +2215,12 @@ def parse_args():
 
     p.add_argument("--uvc1", default=None, help="UVC camera #1 device path (default: launcher/settings/auto-detect)")
     p.add_argument("--uvc2", default=None, help="UVC camera #2 device path (default: launcher/settings/auto-detect)")
+    p.add_argument("--uvc-width", type=int, default=None, help="Requested UVC width")
+    p.add_argument("--uvc-height", type=int, default=None, help="Requested UVC height")
     p.add_argument("--uvc-fps", type=int, default=None, help="FPS for UVCs")
+    p.add_argument("--rs-width", type=int, default=None, help="Requested RealSense width")
+    p.add_argument("--rs-height", type=int, default=None, help="Requested RealSense height")
+    p.add_argument("--rs-fps", type=int, default=None, help="Requested RealSense FPS")
     p.add_argument("--uvc-rotate", action="store_true", default=True, help="(legacy) rotate UVC cameras 180° (now overridden by GUI settings)")
     p.add_argument("--uvc-no-rotate", dest="uvc_rotate", action="store_false", help="Disable legacy 180° rotation (GUI rotation still applies)")
     p.add_argument("--uvc-try-index1", dest="uvc_try_index1", action="store_true", help="Also try the sibling video-index1 node if index0 yields no frames")
@@ -5248,7 +5363,7 @@ def main():
     # ─────────────────────────────────────────────────────────────
     # RealSense
     # ─────────────────────────────────────────────────────────────
-    rs_thread = RealSenseThread(width=640, height=480, fps=30)
+    rs_thread = RealSenseThread(width=args.rs_width, height=args.rs_height, fps=args.rs_fps)
     rs_thread.start()
     t0 = time.time()
     while rs_thread.latest() is None and time.time() - t0 < 2.0:
@@ -5294,7 +5409,7 @@ def main():
     uvc_threads = []
     if uvc1_path:
         uvc1 = UvcThread(
-            uvc1_path, 640, 480, args.uvc_fps, False,
+            uvc1_path, args.uvc_width, args.uvc_height, args.uvc_fps, False,
             name="UVC#1", try_index1_fallback=args.uvc_try_index1
         )
         uvc1.start()
@@ -5306,7 +5421,7 @@ def main():
 
     if uvc2_path:
         uvc2 = UvcThread(
-            uvc2_path, 640, 480, args.uvc_fps, False,
+            uvc2_path, args.uvc_width, args.uvc_height, args.uvc_fps, False,
             name="UVC#2", try_index1_fallback=args.uvc_try_index1
         )
         uvc2.start()
@@ -5335,14 +5450,14 @@ def main():
             uvc_threads.clear()
             if uvc1_path:
                 uvc1 = UvcThread(
-                    uvc1_path, 640, 480, 15, False,
+                    uvc1_path, args.uvc_width, args.uvc_height, 15, False,
                     name="UVC#1", try_index1_fallback=args.uvc_try_index1
                 )
                 uvc1.start()
                 uvc_threads.append(uvc1)
             if uvc2_path:
                 uvc2 = UvcThread(
-                    uvc2_path, 640, 480, 15, False,
+                    uvc2_path, args.uvc_width, args.uvc_height, 15, False,
                     name="UVC#2", try_index1_fallback=args.uvc_try_index1
                 )
                 uvc2.start()
