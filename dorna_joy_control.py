@@ -2261,6 +2261,56 @@ class RobotThread(threading.Thread):
         except Exception:
             pass
 
+    def _soft_stop_live_motion(self):
+        """
+        Release live manual motion by snapping the cached target to the robot's
+        current pose and sending one non-continuous hold target. This avoids the
+        shake from abruptly halting an in-flight Cartesian stream.
+        """
+        stop_pose = None
+        try:
+            stop_pose = self.robot.get_all_pose()[:6]
+        except Exception:
+            stop_pose = None
+
+        if not stop_pose:
+            self._halt_live_motion()
+            return
+
+        x, y, z, a, b, c = [float(v) for v in stop_pose]
+        self.x0, self.y0, self.z0 = x, y, z
+        self.R = axis_angle_to_R(a, b, c)
+
+        tz = self.R[:,2]
+        pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
+        yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
+        with self.state.lock:
+            self.state.pitch = pitch
+            self.state.yaw = yaw_deg
+
+        joints = self._try_get_current_joints()
+        if joints and len(joints) >= 6 and joints[5] is not None:
+            self.j5v = float(joints[5])
+            with self.state.lock:
+                self.state.j5 = self.j5v
+
+        try:
+            self._play_live({
+                "cmd": "lmove",
+                "rel": 0,
+                "x": x,
+                "y": y,
+                "z": z,
+                "a": a,
+                "b": b,
+                "c": c,
+                "vel": max(1.0, self.VR * 0.6),
+                "cont": 0,
+            })
+            self.live_next_send_t = time.time() + self.live_send_interval
+        except Exception:
+            self._halt_live_motion()
+
     def _reset_live_motion_pending(self):
         self.live_lmove_dirty = False
         self.live_j5_pending = 0.0
@@ -3873,11 +3923,16 @@ class RobotThread(threading.Thread):
                     self.live_motion_active = True
                 elif self.live_motion_active:
                     self._reset_live_motion_pending()
-                    self._halt_live_motion()
+                    self._soft_stop_live_motion()
                     self.live_motion_active = False
-                    self.last_pose_refresh = 0.0
+                    self.last_pose_refresh = time.time()
             else:
-                self._reset_live_motion_pending()
+                if self.live_motion_active:
+                    self._reset_live_motion_pending()
+                    self._soft_stop_live_motion()
+                    self.last_pose_refresh = time.time()
+                else:
+                    self._reset_live_motion_pending()
                 self.live_motion_active = False
 
             # Periodic pose refresh to keep pitch/yaw live
