@@ -2248,6 +2248,7 @@ class RobotThread(threading.Thread):
         self.live_motion_active = False
         self.live_lmove_dirty = False
         self.live_rel_xyz_pending = np.zeros(3, dtype=float)
+        self.live_rel_abc_pending = np.zeros(3, dtype=float)
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 40.0
         self.live_next_send_t = 0.0
@@ -2357,6 +2358,7 @@ class RobotThread(threading.Thread):
     def _reset_live_motion_pending(self):
         self.live_lmove_dirty = False
         self.live_rel_xyz_pending.fill(0.0)
+        self.live_rel_abc_pending.fill(0.0)
         self.live_j5_pending = 0.0
         self.live_next_send_t = 0.0
 
@@ -2372,39 +2374,23 @@ class RobotThread(threading.Thread):
             self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
             sent = True
 
-        if self.live_lmove_dirty:
-            self.live_rel_xyz_pending.fill(0.0)
-            a1, b1, c1 = R_to_axis_angle(self.R)
-            self._play_live({
-                "cmd": "lmove",
-                "rel": 0,
-                "x": self.x0,
-                "y": self.y0,
-                "z": self.z0,
-                "a": a1,
-                "b": b1,
-                "c": c1,
-                "vel": self.VR,
-                "cont": 1,
-            })
-            tz = self.R[:,2]
-            pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
-            yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
-            with self.state.lock:
-                self.state.pitch = pitch
-                self.state.yaw = yaw_deg
-            self.live_lmove_dirty = False
-            sent = True
-        elif np.linalg.norm(self.live_rel_xyz_pending) > 1e-9:
+        rel_xyz_norm = np.linalg.norm(self.live_rel_xyz_pending)
+        rel_abc_norm = np.linalg.norm(self.live_rel_abc_pending)
+        if rel_xyz_norm > 1e-9 or rel_abc_norm > 1e-9:
             dx, dy, dz = [float(v) for v in self.live_rel_xyz_pending]
+            da, db, dc = [float(v) for v in self.live_rel_abc_pending]
             self.live_rel_xyz_pending.fill(0.0)
+            self.live_rel_abc_pending.fill(0.0)
             self._play_live({
                 "cmd": "lmove",
                 "rel": 1,
                 "x": dx,
                 "y": dy,
                 "z": dz,
-                "vel": self.VT,
+                "a": da,
+                "b": db,
+                "c": dc,
+                "vel": self.VT if rel_xyz_norm > 1e-9 else self.VR,
                 "cont": 1,
             })
             tz = self.R[:,2]
@@ -3868,7 +3854,6 @@ class RobotThread(threading.Thread):
             live_motion_cmd_sent = False
             live_motion_requested = False
             orientation_requested = False
-            lmove_changed = False
 
             if manual_enabled and left_stick_mode == "y":
                 d = -ly * sx * loop_dt
@@ -3895,6 +3880,7 @@ class RobotThread(threading.Thread):
                     live_motion_requested = True
 
             moved = False
+            R_before_orient = self.R.copy()
             if manual_enabled:
                 at_default = (self.current_named == "Default")
                 rx_eff = -rx if at_default else rx
@@ -3911,7 +3897,12 @@ class RobotThread(threading.Thread):
                     orientation_requested = True
 
             if moved:
-                lmove_changed = True
+                a0, b0, c0 = R_to_axis_angle(R_before_orient)
+                a1, b1, c1 = R_to_axis_angle(self.R)
+                self.live_rel_abc_pending += np.array(
+                    [a1 - a0, b1 - b0, c1 - c0],
+                    dtype=float,
+                )
                 live_motion_requested = True
 
             if manual_enabled:
@@ -3927,7 +3918,7 @@ class RobotThread(threading.Thread):
                     if at_default:
                         if abs(step) > 1e-9:
                             self.z0 += step
-                            lmove_changed = True
+                            self.live_rel_xyz_pending += np.array([0.0, 0.0, step], dtype=float)
                             live_motion_requested = True
                     else:
                         up_axis = tx if abs(tx[2]) >= abs(ty[2]) else ty
@@ -3936,7 +3927,7 @@ class RobotThread(threading.Thread):
                             self.x0 += dx
                             self.y0 += dy
                             self.z0 += dz
-                            lmove_changed = True
+                            self.live_rel_xyz_pending += np.array([dx, dy, dz], dtype=float)
                             live_motion_requested = True
 
                 hx_eff = -hx
@@ -3949,11 +3940,8 @@ class RobotThread(threading.Thread):
                     if abs(dx) > 1e-9 or abs(dy) > 1e-9:
                         self.x0 += dx
                         self.y0 += dy
-                        lmove_changed = True
+                        self.live_rel_xyz_pending += np.array([dx, dy, 0.0], dtype=float)
                         live_motion_requested = True
-
-            if lmove_changed:
-                self.live_lmove_dirty = True
 
             # Sawing motion around J5 during injection (if enabled)
             with self.state.lock:
