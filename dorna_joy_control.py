@@ -2263,9 +2263,10 @@ class RobotThread(threading.Thread):
 
     def _soft_stop_live_motion(self):
         """
-        Release live manual motion by snapping the cached target to the robot's
-        current pose and sending one non-continuous hold target. This avoids the
-        shake from abruptly halting an in-flight Cartesian stream.
+        Release live manual motion by resyncing the cached target to the robot's
+        current pose without sending an extra stop command. Sending a final
+        absolute lmove here can arrive behind the last streamed target and cause
+        a visible reverse correction on stick release.
         """
         stop_pose = None
         try:
@@ -2274,7 +2275,6 @@ class RobotThread(threading.Thread):
             stop_pose = None
 
         if not stop_pose:
-            self._halt_live_motion()
             return
 
         x, y, z, a, b, c = [float(v) for v in stop_pose]
@@ -2293,23 +2293,6 @@ class RobotThread(threading.Thread):
             self.j5v = float(joints["j5"])
             with self.state.lock:
                 self.state.j5 = self.j5v
-
-        try:
-            self._play_live({
-                "cmd": "lmove",
-                "rel": 0,
-                "x": x,
-                "y": y,
-                "z": z,
-                "a": a,
-                "b": b,
-                "c": c,
-                "vel": max(1.0, self.VR * 0.6),
-                "cont": 0,
-            })
-            self.live_next_send_t = time.time() + self.live_send_interval
-        except Exception:
-            self._halt_live_motion()
 
     def _reset_live_motion_pending(self):
         self.live_lmove_dirty = False
