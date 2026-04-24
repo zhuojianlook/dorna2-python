@@ -2243,6 +2243,7 @@ class RobotThread(threading.Thread):
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 20.0
         self.live_next_send_t = 0.0
+        self.live_halt_accel = 8.0
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
         self.last_j4_poll_t = None
@@ -2257,7 +2258,7 @@ class RobotThread(threading.Thread):
 
     def _halt_live_motion(self):
         try:
-            self.robot.halt(accel=5, timeout=0)
+            self.robot.halt(accel=self.live_halt_accel, timeout=0)
         except Exception:
             pass
 
@@ -3143,17 +3144,20 @@ class RobotThread(threading.Thread):
                 self.j5v = self.state.poses["Default"].get("j5", 0.0)
                 self.state.j5 = self.j5v
 
-        control_hz = 60.0
+        control_hz = 120.0
         next_t = time.time()
         joint_poll_time = 0.0
-        last_control_t = time.time()
+        last_control_t = next_t
 
         while not self.stop_event.is_set():
             now = time.time()
-            loop_dt = min(0.05, max(1.0 / control_hz, now - last_control_t))
-            last_control_t = now
             if now < next_t:
                 time.sleep(next_t - now)
+                now = time.time()
+            else:
+                next_t = now
+            loop_dt = min(0.05, max(1.0 / control_hz, now - last_control_t))
+            last_control_t = now
             next_t += 1 / control_hz
 
             try:
