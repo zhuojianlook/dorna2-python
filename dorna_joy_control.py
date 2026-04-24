@@ -741,6 +741,16 @@ DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
+DEFAULT_SELF_COLLISION = {
+    "enabled": True,
+    "link_radii_mm": [32.0, 35.0, 20.0, 32.0, 24.0, 18.0],
+    "pair_margin_mm": 8.0,
+    "min_link_gap": 3,
+    "path_step_deg": 6.0,
+    "base_radius_mm": 75.0,
+    "base_height_mm": 230.0,
+    "base_segments": [3, 4, 5],
+}
 
 DEFAULT_POSES = {
     "Reload":  {"j0": 7.71, "j1": 80.86, "j2": -100.00, "j3": -0.07, "j4": -70.60, "j5": 6.35},
@@ -810,6 +820,69 @@ def _normalize_collision_zones(raw_zones):
         })
 
     return zones
+
+def _normalize_float_list(raw, length, fallback):
+    if not isinstance(raw, (list, tuple)):
+        return list(fallback)
+    out = []
+    for idx in range(length):
+        try:
+            out.append(float(raw[idx]))
+        except Exception:
+            out.append(float(fallback[idx]))
+    return out
+
+def _normalize_int_list(raw, fallback):
+    if not isinstance(raw, (list, tuple)):
+        return list(fallback)
+    out = []
+    for item in raw:
+        try:
+            out.append(int(item))
+        except Exception:
+            continue
+    return out or list(fallback)
+
+def _normalize_self_collision(raw_cfg):
+    base = dict(DEFAULT_SELF_COLLISION)
+    if isinstance(raw_cfg, bool):
+        base["enabled"] = bool(raw_cfg)
+        return base
+    if not isinstance(raw_cfg, dict):
+        return base
+
+    if "enabled" in raw_cfg:
+        base["enabled"] = bool(raw_cfg.get("enabled"))
+    base["link_radii_mm"] = _normalize_float_list(
+        raw_cfg.get("link_radii_mm", raw_cfg.get("link_radii", base["link_radii_mm"])),
+        6,
+        base["link_radii_mm"],
+    )
+    try:
+        base["pair_margin_mm"] = float(raw_cfg.get("pair_margin_mm", base["pair_margin_mm"]))
+    except Exception:
+        pass
+    try:
+        base["min_link_gap"] = max(2, int(raw_cfg.get("min_link_gap", base["min_link_gap"])))
+    except Exception:
+        pass
+    try:
+        base["path_step_deg"] = max(0.5, float(raw_cfg.get("path_step_deg", base["path_step_deg"])))
+    except Exception:
+        pass
+    try:
+        base["base_radius_mm"] = max(0.0, float(raw_cfg.get("base_radius_mm", base["base_radius_mm"])))
+    except Exception:
+        pass
+    try:
+        base["base_height_mm"] = max(0.0, float(raw_cfg.get("base_height_mm", base["base_height_mm"])))
+    except Exception:
+        pass
+    base["base_segments"] = _normalize_int_list(
+        raw_cfg.get("base_segments", base["base_segments"]),
+        base["base_segments"],
+    )
+    return base
 
 def load_poses(path=POSES_PATH):
     try:
@@ -925,6 +998,7 @@ def load_settings(path=SETTINGS_PATH):
                 norm_presets.append({"name": nm, "lz": lz_p, "cx": cx_p, "cy": cy_p})
 
         collision_zones = _normalize_collision_zones(data.get("collision_zones", []))
+        self_collision = _normalize_self_collision(data.get("self_collision", {}))
 
         return {
             "tool_lz": tool_lz,
@@ -966,6 +1040,7 @@ def load_settings(path=SETTINGS_PATH):
             "saw_freq_hz": saw_freq_hz,
             "tool_presets": norm_presets,
             "collision_zones": collision_zones,
+            "self_collision": self_collision,
         }
     except Exception as e:
         print(f"⚠️ Using default settings (could not load {path}: {e})")
@@ -1009,6 +1084,7 @@ def load_settings(path=SETTINGS_PATH):
             "saw_freq_hz": 1.0,
             "tool_presets": [],
             "collision_zones": [],
+            "self_collision": dict(DEFAULT_SELF_COLLISION),
         }
 
 
@@ -2631,7 +2707,100 @@ class RobotThread(threading.Thread):
             return
         self.last_collision_zone = zone_name
         self.last_collision_t = now
-        print(f"[Collision] Blocked {context}: zone '{zone_name}'")
+        print(f"[Collision] Blocked {context}: {zone_name}")
+
+    def _self_collision_cfg(self):
+        with self.state.lock:
+            cfg = dict(self.state.settings.get("self_collision", {}))
+        if not cfg:
+            cfg = dict(DEFAULT_SELF_COLLISION)
+        if "link_radii_mm" not in cfg:
+            cfg["link_radii_mm"] = list(DEFAULT_SELF_COLLISION["link_radii_mm"])
+        else:
+            cfg["link_radii_mm"] = _normalize_float_list(
+                cfg.get("link_radii_mm"),
+                6,
+                DEFAULT_SELF_COLLISION["link_radii_mm"],
+            )
+        cfg["base_segments"] = _normalize_int_list(
+            cfg.get("base_segments"),
+            DEFAULT_SELF_COLLISION["base_segments"],
+        )
+        return cfg
+
+    @staticmethod
+    def _segment_distance(p0, p1, q0, q1):
+        p0 = np.asarray(p0, dtype=float)
+        p1 = np.asarray(p1, dtype=float)
+        q0 = np.asarray(q0, dtype=float)
+        q1 = np.asarray(q1, dtype=float)
+        u = p1 - p0
+        v = q1 - q0
+        w = p0 - q0
+        a = float(np.dot(u, u))
+        b = float(np.dot(u, v))
+        c = float(np.dot(v, v))
+        d = float(np.dot(u, w))
+        e = float(np.dot(v, w))
+        D = a * c - b * b
+        small = 1e-9
+        sN = 0.0
+        sD = D
+        tN = 0.0
+        tD = D
+
+        if D < small:
+            sN = 0.0
+            sD = 1.0
+            tN = e
+            tD = c
+        else:
+            sN = b * e - c * d
+            tN = a * e - b * d
+            if sN < 0.0:
+                sN = 0.0
+                tN = e
+                tD = c
+            elif sN > sD:
+                sN = sD
+                tN = e + b
+                tD = c
+
+        if tN < 0.0:
+            tN = 0.0
+            if -d < 0.0:
+                sN = 0.0
+            elif -d > a:
+                sN = sD
+            else:
+                sN = -d
+                sD = a
+        elif tN > tD:
+            tN = tD
+            if (-d + b) < 0.0:
+                sN = 0.0
+            elif (-d + b) > a:
+                sN = sD
+            else:
+                sN = -d + b
+                sD = a
+
+        sc = 0.0 if abs(sN) < small else sN / sD
+        tc = 0.0 if abs(tN) < small else tN / tD
+        dp = w + sc * u - tc * v
+        return float(np.linalg.norm(dp))
+
+    @staticmethod
+    def _segment_hits_base_cylinder(p0, p1, radius_mm: float, height_mm: float):
+        if radius_mm <= 0 or height_mm <= 0:
+            return False
+        p0 = np.asarray(p0, dtype=float)
+        p1 = np.asarray(p1, dtype=float)
+        for t in np.linspace(0.0, 1.0, 11):
+            pt = p0 + (p1 - p0) * float(t)
+            if pt[2] <= height_mm and (pt[0] * pt[0] + pt[1] * pt[1]) <= (radius_mm * radius_mm):
+                return True
+        return False
 
     def _dict_in_ranges(self, values: dict, ranges: dict) -> bool:
         for axis, bounds in (ranges or {}).items():
@@ -2711,6 +2880,98 @@ class RobotThread(threading.Thread):
                     pass
         return merged
 
+    def _link_points_from_joint_list(self, joint_list):
+        if joint_list is None or len(joint_list) < 6:
+            return None
+        points = []
+        try:
+            for i in range(0, 7):
+                T = np.array(self.robot.kinematic.Ti_r_world(joint=joint_list, i=i), dtype=float)
+                points.append(T[:3, 3].astype(float))
+        except Exception:
+            return None
+        return points
+
+    def _joint_path_samples(self, start_joint, target_joint, step_deg: float):
+        if start_joint is None or target_joint is None:
+            return []
+        start = np.asarray(start_joint, dtype=float)
+        target = np.asarray(target_joint, dtype=float)
+        if start.shape[0] < 6 or target.shape[0] < 6:
+            return []
+        max_delta = float(np.max(np.abs(target[:6] - start[:6])))
+        if max_delta <= 1e-6:
+            return [target[:6].tolist()]
+        samples = int(np.ceil(max_delta / max(step_deg, 0.5)))
+        samples = max(1, min(samples, 30))
+        return [
+            (start + (target - start) * (idx / samples))[:6].tolist()
+            for idx in range(1, samples + 1)
+        ]
+
+    def _find_self_collision_for_joint_list(self, joint_list, cfg):
+        points = self._link_points_from_joint_list(joint_list)
+        if not points or len(points) < 7:
+            return None
+
+        radii = list(cfg.get("link_radii_mm", DEFAULT_SELF_COLLISION["link_radii_mm"]))
+        margin = float(cfg.get("pair_margin_mm", DEFAULT_SELF_COLLISION["pair_margin_mm"]))
+        min_gap = max(2, int(cfg.get("min_link_gap", DEFAULT_SELF_COLLISION["min_link_gap"])))
+
+        for i in range(6):
+            for j in range(i + min_gap, 6):
+                if j >= len(radii) or i >= len(radii):
+                    continue
+                dist = self._segment_distance(points[i], points[i + 1], points[j], points[j + 1])
+                limit = float(radii[i]) + float(radii[j]) + margin
+                if dist < limit:
+                    return f"self-collision link{i}-link{j}"
+
+        base_radius = float(cfg.get("base_radius_mm", DEFAULT_SELF_COLLISION["base_radius_mm"]))
+        base_height = float(cfg.get("base_height_mm", DEFAULT_SELF_COLLISION["base_height_mm"]))
+        for seg_idx in cfg.get("base_segments", DEFAULT_SELF_COLLISION["base_segments"]):
+            if not isinstance(seg_idx, int) or seg_idx < 0 or seg_idx >= 6:
+                continue
+            if self._segment_hits_base_cylinder(points[seg_idx], points[seg_idx + 1], base_radius, base_height):
+                return f"self-collision base-link{seg_idx}"
+
+        return None
+
+    def _find_self_collision(self, tcp_pose=None, joints=None, sweep=False):
+        cfg = self._self_collision_cfg()
+        if not cfg.get("enabled", True):
+            return None
+
+        target_joint = None
+        if isinstance(joints, dict):
+            target_joint = self._joint_dict_to_list(joints)
+        elif isinstance(joints, (list, tuple, np.ndarray)):
+            try:
+                target_joint = [float(v) for v in list(joints)[:6]]
+            except Exception:
+                target_joint = None
+        elif tcp_pose is not None:
+            solved = self._solve_joints_for_tcp_pose(tcp_pose)
+            target_joint = self._joint_dict_to_list(solved)
+
+        if target_joint is None:
+            return None
+
+        if sweep:
+            current = self._joint_dict_to_list(self._try_get_current_joints())
+            if current is not None:
+                samples = self._joint_path_samples(
+                    current,
+                    target_joint,
+                    float(cfg.get("path_step_deg", DEFAULT_SELF_COLLISION["path_step_deg"])),
+                )
+                for sample in samples:
+                    hit = self._find_self_collision_for_joint_list(sample, cfg)
+                    if hit:
+                        return hit
+
+        return self._find_self_collision_for_joint_list(target_joint, cfg)
+
     def _find_collision_zone(self, tcp_pose=None, joints=None):
         with self.state.lock:
             zones = list(self.state.settings.get("collision_zones", []))
@@ -2744,17 +3005,25 @@ class RobotThread(threading.Thread):
             return str(zone.get("name") or "unnamed")
         return None
 
-    def _guard_tcp_target(self, tcp_pose, context: str):
+    def _guard_tcp_target(self, tcp_pose, context: str, sweep: bool = False):
         zone = self._find_collision_zone(tcp_pose=tcp_pose)
         if zone:
             self._collision_print(zone, context)
             return False
+        hit = self._find_self_collision(tcp_pose=tcp_pose, sweep=sweep)
+        if hit:
+            self._collision_print(hit, context)
+            return False
         return True
 
-    def _guard_joint_target(self, joint_target: dict, context: str):
+    def _guard_joint_target(self, joint_target: dict, context: str, sweep: bool = False):
         zone = self._find_collision_zone(joints=joint_target)
         if zone:
             self._collision_print(zone, context)
+            return False
+        hit = self._find_self_collision(joints=joint_target, sweep=sweep)
+        if hit:
+            self._collision_print(hit, context)
             return False
         return True
 
@@ -2878,7 +3147,7 @@ class RobotThread(threading.Thread):
         if abs(self.live_j5_pending) > self.live_j5_epsilon:
             delta = self.live_j5_pending
             j_target = self._merge_joint_target({"j5": self.j5v})
-            if j_target is not None and not self._guard_joint_target(j_target, "live J5 motion"):
+            if j_target is not None and not self._guard_joint_target(j_target, "live J5 motion", sweep=True):
                 self.live_j5_pending = 0.0
                 self._reset_live_motion_pending()
                 self._soft_stop_live_motion()
@@ -2890,7 +3159,7 @@ class RobotThread(threading.Thread):
         if self.live_abs_pose_dirty:
             a1, b1, c1 = R_to_axis_angle(self.R)
             pose_now = (float(self.x0), float(self.y0), float(self.z0), float(a1), float(b1), float(c1))
-            if not self._guard_tcp_target(pose_now, "live TCP motion"):
+            if not self._guard_tcp_target(pose_now, "live TCP motion", sweep=True):
                 self._reset_live_motion_pending()
                 self._soft_stop_live_motion()
                 return True
@@ -2943,7 +3212,7 @@ class RobotThread(threading.Thread):
         ):
             a1, b1, c1 = R_to_axis_angle(self.R)
             pose_now = (float(self.x0), float(self.y0), float(self.z0), float(a1), float(b1), float(c1))
-            if not self._guard_tcp_target(pose_now, "live TCP motion"):
+            if not self._guard_tcp_target(pose_now, "live TCP motion", sweep=True):
                 self._reset_live_motion_pending()
                 self._soft_stop_live_motion()
                 return True
@@ -3010,7 +3279,7 @@ class RobotThread(threading.Thread):
     def _queue_jmove_to_pose(self, pose: dict):
         target_joints = {axis: pose[axis] for axis in COLLISION_JOINT_AXES if axis in pose}
         merged_target = self._merge_joint_target(target_joints)
-        if merged_target is not None and not self._guard_joint_target(merged_target, "joint move"):
+        if merged_target is not None and not self._guard_joint_target(merged_target, "joint move", sweep=True):
             return False
         go = {"cmd":"jmove","rel":0,"vel":self.VR_POSE}
         go.update(pose)
@@ -3601,7 +3870,7 @@ class RobotThread(threading.Thread):
             float(self.x0 + dx), float(self.y0 + dy), float(self.z0 + dz),
             float(a_deg), float(b_deg), float(c_deg),
         )
-        if not self._guard_tcp_target(target_pose, "tool-axis move"):
+        if not self._guard_tcp_target(target_pose, "tool-axis move", sweep=True):
             return False
         self.robot.play_dict({"cmd":"lmove","rel":1,"x":dx,"y":dy,"z":dz,"vel":self.VT,"cont":cont})
         self.x0 += dx
@@ -3640,7 +3909,7 @@ class RobotThread(threading.Thread):
             return False
         try:
             x, y, z, a, b, c = pose
-            if not self._guard_tcp_target((x, y, z, a, b, c), "TCP move"):
+            if not self._guard_tcp_target((x, y, z, a, b, c), "TCP move", sweep=True):
                 return False
             self.robot.play_dict({
                 "cmd": "lmove",
@@ -4048,7 +4317,7 @@ class RobotThread(threading.Thread):
                         try:
                             self._refresh_from_robot()
                             merged_target = self._merge_joint_target({"j5": target})
-                            if merged_target is not None and not self._guard_joint_target(merged_target, "absolute J5 move"):
+                            if merged_target is not None and not self._guard_joint_target(merged_target, "absolute J5 move", sweep=True):
                                 continue
                             self.robot.play_dict({"cmd": "jmove", "rel": 0, "j5": target, "vel": self.VR_POSE})
                             self._mark_motion_for(0.6)
@@ -6102,6 +6371,7 @@ def main():
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
             {"label": f"Collision zones: {len(settings.get('collision_zones', []))} configured (edit settings.json)", "kind": "collision_info"},
+            {"label": f"Self-collision guard: {'ON' if settings.get('self_collision', {}).get('enabled', True) else 'OFF'} (edit settings.json)", "kind": "collision_info"},
             {"label": f"Alarm sensitivity: {state.settings.get('alarm_sensitivity', DEFAULT_ALARM_SENSITIVITY):.2f}", "kind": "alarm_sensitivity"},
             {"label": "Quit", "kind": "quit_app"},
         ]
