@@ -3935,8 +3935,12 @@ class RobotThread(threading.Thread):
                     self._reset_live_motion_pending()
                 self.live_motion_active = False
 
-            # Periodic pose refresh to keep pitch/yaw live
-            if time.time() - self.last_pose_refresh >= 0.2:
+            # Do not overwrite the live manual target with controller feedback
+            # while the operator is actively holding input.
+            if (
+                not (live_motion_requested or self.live_motion_active)
+                and time.time() - self.last_pose_refresh >= 0.2
+            ):
                 try:
                     self._refresh_from_robot()
                 except Exception:
