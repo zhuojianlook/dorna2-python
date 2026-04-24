@@ -739,6 +739,8 @@ DEFAULT_TOOL_CX     = 0.0
 DEFAULT_TOOL_CY     = 0.0
 DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
+DEFAULT_PID_THRESHOLD_MAIN = 200.0
+DEFAULT_PID_DURATION_MAIN = 10000.0
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
 DEFAULT_SELF_COLLISION = {
@@ -883,6 +885,22 @@ def _normalize_self_collision(raw_cfg):
         base["base_segments"],
     )
     return base
+
+def _alarm_pid_from_sensitivity(val: float):
+    """
+    Map a 0..1 halt-sensitivity setting onto Dorna's threshold/duration scale.
+    0.0 keeps the stock threshold/duration, 1.0 makes halting much more eager.
+    """
+    try:
+        val = float(val)
+    except Exception:
+        val = DEFAULT_ALARM_SENSITIVITY
+    val = max(0.0, min(1.0, val))
+    threshold_scale = 1.0 - 0.70 * val
+    duration_scale = 1.0 - 0.75 * val
+    threshold = max(40.0, round(DEFAULT_PID_THRESHOLD_MAIN * threshold_scale))
+    duration = max(1000.0, round(DEFAULT_PID_DURATION_MAIN * duration_scale))
+    return val, threshold, duration
 
 def load_poses(path=POSES_PATH):
     try:
@@ -1109,6 +1127,7 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_rs_fps": DEFAULT_RS_FPS,
         "startup_uvc_try_index1": False,
         "startup_fullscreen": False,
+        "startup_alarm_sensitivity": DEFAULT_ALARM_SENSITIVITY,
         "startup_show_launcher": True,
     }
 
@@ -1118,6 +1137,10 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         for key in defaults:
             if key in legacy:
                 defaults[key] = legacy[key]
+        if "alarm_sensitivity" in legacy:
+            defaults["startup_alarm_sensitivity"] = float(
+                legacy.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+            )
     except Exception:
         pass
 
@@ -1179,6 +1202,11 @@ def _resolve_startup_args(args, settings):
         args.uvc_try_index1 = bool(settings.get("startup_uvc_try_index1", False))
     if args.fullscreen is None:
         args.fullscreen = bool(settings.get("startup_fullscreen", False))
+    args.alarm_sensitivity = float(
+        args.alarm_sensitivity
+        if getattr(args, "alarm_sensitivity", None) is not None
+        else settings.get("startup_alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+    )
     if args.launcher is None:
         args.launcher = bool(settings.get("startup_show_launcher", True))
     return args
@@ -1196,6 +1224,9 @@ def _persist_startup_args(settings, args):
     settings["startup_rs_fps"] = int(args.rs_fps or DEFAULT_RS_FPS)
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
+    settings["startup_alarm_sensitivity"] = float(
+        max(0.0, min(1.0, getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)))
+    )
     settings["startup_show_launcher"] = bool(args.launcher)
     save_startup_settings(settings)
 
@@ -1238,8 +1269,10 @@ def show_startup_launcher(args):
     )
     try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
+    alarm_sensitivity_var = tk.DoubleVar(value=float(getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)))
     launcher_var = tk.BooleanVar(value=bool(args.launcher))
     status_var = tk.StringVar(value="Detecting cameras...")
+    alarm_status_var = tk.StringVar(value="")
     option_paths = [""]
 
     frame = ttk.Frame(root, padding=14)
@@ -1300,26 +1333,40 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Try sibling video-index1 if index0 has no frames", variable=try_index1_var).grid(
         row=7, column=0, columnspan=4, sticky="w", pady=(8, 0)
     )
+    ttk.Label(frame, text="Halt sensitivity").grid(row=8, column=0, sticky="w", pady=(8, 0))
+    alarm_scale = ttk.Scale(frame, from_=0.0, to=1.0, variable=alarm_sensitivity_var)
+    alarm_scale.grid(row=8, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
+    ttk.Label(
+        frame,
+        textvariable=alarm_status_var,
+    ).grid(row=9, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0))
     ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        row=10, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
     ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
-        row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        row=11, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
 
-    ttk.Separator(frame).grid(row=10, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=12, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=11, column=0, columnspan=4, sticky="w"
+        row=13, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=12, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=14, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=13, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=15, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=14, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=16, column=0, columnspan=4, sticky="e", pady=(4, 0))
+
+    def refresh_alarm_status(*_args):
+        sens = max(0.0, min(1.0, float(alarm_sensitivity_var.get())))
+        _, threshold, duration = _alarm_pid_from_sensitivity(sens)
+        alarm_status_var.set(
+            f"{sens:.2f}  ->  threshold {int(threshold)}, duration {int(duration)}"
+        )
 
     def refresh_inventory():
         nonlocal option_paths
@@ -1393,6 +1440,7 @@ def show_startup_launcher(args):
         args.rs_fps = rs_fps
         args.uvc_try_index1 = bool(try_index1_var.get())
         args.fullscreen = bool(fullscreen_var.get())
+        args.alarm_sensitivity = max(0.0, min(1.0, float(alarm_sensitivity_var.get())))
         args.launcher = bool(launcher_var.get())
         result["ok"] = True
         root.destroy()
@@ -1402,6 +1450,8 @@ def show_startup_launcher(args):
     ttk.Button(button_bar, text="Start Control", command=start).grid(row=0, column=2)
 
     refresh_inventory()
+    refresh_alarm_status()
+    alarm_scale.configure(command=lambda _v: refresh_alarm_status())
     host_entry.focus_set()
     root.protocol("WM_DELETE_WINDOW", cancel)
     root.mainloop()
@@ -2368,6 +2418,7 @@ def parse_args():
     p.add_argument("--uvc-try-index1", dest="uvc_try_index1", action="store_true", help="Also try the sibling video-index1 node if index0 yields no frames")
     p.add_argument("--no-uvc-try-index1", dest="uvc_try_index1", action="store_false", help="Do not try sibling video-index1 nodes")
     p.set_defaults(uvc_try_index1=None)
+    p.add_argument("--alarm-sensitivity", type=float, default=None, help="Robot halt sensitivity (0..1, higher halts sooner)")
 
     p.add_argument("--fullscreen", dest="fullscreen", action="store_true", help="Start in fullscreen (toggle with F11)")
     p.add_argument("--windowed", dest="fullscreen", action="store_false", help="Force windowed startup")
@@ -2700,6 +2751,21 @@ class RobotThread(threading.Thread):
         except Exception:
             pass
 
+    def _apply_alarm_sensitivity(self, val: float, persist: bool = True):
+        val, threshold, duration = _alarm_pid_from_sensitivity(val)
+        for axis in range(6):
+            self.robot.set_pid(index=axis, threshold=threshold, duration=duration)
+        self.robot.set_alarm(1)
+        with self.state.lock:
+            self.state.settings["alarm_sensitivity"] = val
+            self.state.alarm_sensitivity = val
+        if persist:
+            save_settings(self.state.settings)
+        print(
+            f"[Halt] Sensitivity set to {val:.2f} "
+            f"(threshold={int(threshold)}, duration={int(duration)})"
+        )
+
     def _collision_print(self, zone_name: str, context: str):
         zone_name = str(zone_name or "unnamed")
         now = time.time()
@@ -3006,25 +3072,9 @@ class RobotThread(threading.Thread):
         return None
 
     def _guard_tcp_target(self, tcp_pose, context: str, sweep: bool = False):
-        zone = self._find_collision_zone(tcp_pose=tcp_pose)
-        if zone:
-            self._collision_print(zone, context)
-            return False
-        hit = self._find_self_collision(tcp_pose=tcp_pose, sweep=sweep)
-        if hit:
-            self._collision_print(hit, context)
-            return False
         return True
 
     def _guard_joint_target(self, joint_target: dict, context: str, sweep: bool = False):
-        zone = self._find_collision_zone(joints=joint_target)
-        if zone:
-            self._collision_print(zone, context)
-            return False
-        hit = self._find_self_collision(joints=joint_target, sweep=sweep)
-        if hit:
-            self._collision_print(hit, context)
-            return False
         return True
 
     def _preprocess_left_stick(self, lx: float, ly: float):
@@ -3977,7 +4027,7 @@ class RobotThread(threading.Thread):
         moved_demo = False
         try:
             if not self._tool_move_along_tz(-approach_mm, cont=0):
-                print(f"⚠️ Could not demonstrate midway for '{name}' because a collision zone blocked the retract.")
+                print(f"⚠️ Could not demonstrate midway for '{name}' because the retract move did not complete.")
                 return False
             moved_demo = True
             time.sleep(0.05)
@@ -4049,6 +4099,14 @@ class RobotThread(threading.Thread):
             sys.exit(1)
 
         print(f"[Robot] Kinematic model: {getattr(robot, 'model', 'unknown')} (n_dof={getattr(robot.kinematic, 'n_dof', '?')})")
+        try:
+            with self.state.lock:
+                startup_alarm_sensitivity = float(
+                    self.state.settings.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+                )
+            self._apply_alarm_sensitivity(startup_alarm_sensitivity, persist=False)
+        except Exception as e:
+            print(f"⚠️ Could not apply startup halt sensitivity: {e}")
         robot.set_motor(1)
         self._update_tcp_from_settings()
 
@@ -4065,7 +4123,7 @@ class RobotThread(threading.Thread):
                 self._set_current_named("Default")
                 print("[Robot] Ready at Default.")
             else:
-                print("⚠️ Default pose is inside a configured collision zone; startup move skipped.")
+                print("⚠️ Default pose move did not complete at startup.")
         except Exception as e:
             print(f"⚠️ Could not home to Default pose: {e}")
             try:
@@ -4490,17 +4548,8 @@ class RobotThread(threading.Thread):
                             val = float(cmd.get("sens"))
                         except Exception:
                             val = DEFAULT_ALARM_SENSITIVITY
-                        val = max(0.0, min(1.0, val))
-                        # Map slider to tighter threshold/duration for higher sensitivity
-                        threshold = 0.001 + (1.0 - val) * 0.2  # smaller = more sensitive
-                        duration = 0.01 + (1.0 - val) * 0.2    # shorter = more sensitive
                         try:
-                            self.robot.set_pid(index=0, threshold=threshold, duration=duration)
-                            self.robot.set_alarm(1 if val > 0.0 else 0)
-                            with self.state.lock:
-                                self.state.settings["alarm_sensitivity"] = val
-                            save_settings(self.state.settings)
-                            print(f"[Alarm] Sensitivity set: threshold={threshold:.4f}, duration={duration:.3f}")
+                            self._apply_alarm_sensitivity(val, persist=True)
                         except Exception as e:
                             print(f"⚠️ set_alarm_sensitivity failed: {e}")
                         continue
@@ -6022,6 +6071,11 @@ def main():
     state = SharedState()
     with state.lock:
         state.poses["Reload"] = DEFAULT_POSES["Reload"].copy()
+        state.settings["alarm_sensitivity"] = max(
+            0.0,
+            min(1.0, float(getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY))),
+        )
+        state.alarm_sensitivity = float(state.settings["alarm_sensitivity"])
     save_poses(state.poses)
     save_settings(state.settings)
 
@@ -6370,9 +6424,7 @@ def main():
             {"label": "— Settings —", "kind": "header"},
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
-            {"label": f"Collision zones: {len(settings.get('collision_zones', []))} configured (edit settings.json)", "kind": "collision_info"},
-            {"label": f"Self-collision guard: {'ON' if settings.get('self_collision', {}).get('enabled', True) else 'OFF'} (edit settings.json)", "kind": "collision_info"},
-            {"label": f"Alarm sensitivity: {state.settings.get('alarm_sensitivity', DEFAULT_ALARM_SENSITIVITY):.2f}", "kind": "alarm_sensitivity"},
+            {"label": f"Halt sensitivity: {state.settings.get('alarm_sensitivity', DEFAULT_ALARM_SENSITIVITY):.2f}", "kind": "alarm_sensitivity"},
             {"label": "Quit", "kind": "quit_app"},
         ]
 
