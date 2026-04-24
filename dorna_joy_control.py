@@ -2233,6 +2233,13 @@ class RobotThread(threading.Thread):
         self.VT, self.VR    = 10.0, 5.0
         self.VR_POSE        = self.VR * 2.0
         self.DZ             = 0.1
+        self.left_stick_deadzone = 0.14
+        self.left_stick_filter_alpha = 0.35
+        self.left_stick_cmd_threshold = 0.01
+        self.left_stick_axis_margin = 0.08
+        self.left_stick_lx_cmd = 0.0
+        self.left_stick_ly_cmd = 0.0
+        self.left_stick_mode = None
 
         # Sawing motion (J5 oscillation) state
         self.saw_prev_offset = 0.0
@@ -2261,6 +2268,56 @@ class RobotThread(threading.Thread):
             self.robot.halt(accel=self.live_halt_accel, timeout=0)
         except Exception:
             pass
+
+    def _shape_left_stick(self, lx: float, ly: float):
+        lx = _apply_deadzone(lx, self.left_stick_deadzone)
+        ly = _apply_deadzone(ly, self.left_stick_deadzone)
+
+        if lx == 0.0:
+            self.left_stick_lx_cmd = 0.0
+        else:
+            self.left_stick_lx_cmd += (
+                lx - self.left_stick_lx_cmd
+            ) * self.left_stick_filter_alpha
+
+        if ly == 0.0:
+            self.left_stick_ly_cmd = 0.0
+        else:
+            self.left_stick_ly_cmd += (
+                ly - self.left_stick_ly_cmd
+            ) * self.left_stick_filter_alpha
+
+        return self.left_stick_lx_cmd, self.left_stick_ly_cmd
+
+    def _resolve_left_stick_mode(self, lx: float, ly: float):
+        ax = abs(lx)
+        ay = abs(ly)
+        thr = self.left_stick_cmd_threshold
+        margin = self.left_stick_axis_margin
+
+        if ax < thr and ay < thr:
+            self.left_stick_mode = None
+            return None
+
+        if self.left_stick_mode == "x":
+            if ax < thr:
+                self.left_stick_mode = "y" if ay >= thr else None
+            elif ay > ax + margin:
+                self.left_stick_mode = "y"
+        elif self.left_stick_mode == "y":
+            if ay < thr:
+                self.left_stick_mode = "x" if ax >= thr else None
+            elif ax > ay + margin:
+                self.left_stick_mode = "x"
+        else:
+            if ay >= ax + margin:
+                self.left_stick_mode = "y"
+            elif ax >= ay + margin:
+                self.left_stick_mode = "x"
+            else:
+                self.left_stick_mode = "y" if ay >= ax else "x"
+
+        return self.left_stick_mode
 
     def _soft_stop_live_motion(self):
         """
@@ -3774,30 +3831,37 @@ class RobotThread(threading.Thread):
                 sens   = self.state.levels[self.state.idx]
                 waiting = self.state.await_confirm
 
+            lx, ly = self._shape_left_stick(lx, ly)
             rx = _apply_deadzone(rx, self.orient_deadzone)
             ry = _apply_deadzone(ry, self.orient_deadzone)
             sx, sj5, sb, sc, sh = (5.0*sens, 5.0*sens, 0.5*sens, 0.5*sens, 5.0*sens)
             manual_enabled = (time.time() >= self.skip_manual_until) and (not waiting)
+            if manual_enabled:
+                left_stick_mode = self._resolve_left_stick_mode(lx, ly)
+            else:
+                self.left_stick_mode = None
+                self.left_stick_lx_cmd = 0.0
+                self.left_stick_ly_cmd = 0.0
+                left_stick_mode = None
             live_motion_cmd_sent = False
             live_motion_requested = False
             orientation_requested = False
             lmove_changed = False
 
-            if manual_enabled and abs(ly) > self.DZ:
-                if abs(ly) >= abs(lx):
-                    d = -ly * sx * loop_dt
-                    tz = self.R[:,2]
-                    dx = tz[0] * d
-                    dy = tz[1] * d
-                    dz = tz[2] * d
-                    if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
-                        self.x0 += dx
-                        self.y0 += dy
-                        self.z0 += dz
-                        lmove_changed = True
-                        live_motion_requested = True
+            if manual_enabled and left_stick_mode == "y":
+                d = -ly * sx * loop_dt
+                tz = self.R[:,2]
+                dx = tz[0] * d
+                dy = tz[1] * d
+                dz = tz[2] * d
+                if abs(dx) > 1e-9 or abs(dy) > 1e-9 or abs(dz) > 1e-9:
+                    self.x0 += dx
+                    self.y0 += dy
+                    self.z0 += dz
+                    lmove_changed = True
+                    live_motion_requested = True
 
-            if manual_enabled and abs(lx) > self.DZ and abs(lx) > abs(ly):
+            if manual_enabled and left_stick_mode == "x":
                 delta = lx * sj5 * loop_dt
                 if abs(delta) > 1e-9:
                     self.j5v += delta
