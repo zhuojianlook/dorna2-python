@@ -7,6 +7,8 @@ import os
 import json
 import queue
 import re, glob
+import shutil
+import subprocess
 from dataclasses import dataclass
 import math
 import pygame
@@ -31,6 +33,8 @@ DATA_ROOT_DIR = os.path.join(os.path.expanduser("~"), "Desktop", "RobotInjection
 DEFAULT_DORNA_HOST = "10.42.0.11"
 DEFAULT_DORNA_PORT = 443
 DEFAULT_UVC_FPS = 30
+_V4L2_CTL = shutil.which("v4l2-ctl")
+_V4L2_CAPS_CACHE = {}
 
 # ─────────────────────────────────────────────────────────────────────────────
 #                              UVC CAMERA SUPPORT
@@ -92,6 +96,110 @@ def _video_node_sort_key(path: str):
     m = re.match(r"^/dev/video(\d+)$", str(path))
     return int(m.group(1)) if m else 9999
 
+def _v4l2_caps_text(node: str) -> str:
+    node = os.path.realpath(str(node))
+    cached = _V4L2_CAPS_CACHE.get(node)
+    if cached is not None:
+        return cached
+    text = ""
+    if _V4L2_CTL:
+        try:
+            cp = subprocess.run(
+                [_V4L2_CTL, "-D", "-d", node],
+                capture_output=True,
+                text=True,
+                timeout=1.5,
+                check=False,
+            )
+            text = (cp.stdout or "") + ("\n" + cp.stderr if cp.stderr else "")
+        except Exception:
+            text = ""
+    _V4L2_CAPS_CACHE[node] = text
+    return text
+
+def _v4l2_device_caps(node: str) -> list:
+    caps = []
+    in_device_caps = False
+    for raw in _v4l2_caps_text(node).splitlines():
+        line = raw.strip().lower()
+        if line.startswith("device caps"):
+            in_device_caps = True
+            continue
+        if in_device_caps:
+            if raw and not raw[0].isspace():
+                break
+            if line:
+                caps.append(line)
+    return caps
+
+def _uvc_path_capture_rank(path: str) -> int:
+    node = os.path.realpath(str(path))
+    caps = _v4l2_device_caps(node)
+    if caps:
+        if any("video capture" in cap for cap in caps):
+            return 0
+        if any("metadata capture" in cap for cap in caps):
+            return 2
+    idx = _read_text(f"/sys/class/video4linux/{os.path.basename(node)}/index")
+    if idx == "0":
+        return 0
+    if idx.isdigit():
+        return 1
+    return 1
+
+def _uvc_alias_sort_key(path: str):
+    return (_uvc_path_capture_rank(path),) + _camera_path_rank(path)
+
+def _prefer_capture_aliases(paths) -> list:
+    uniq = []
+    seen = set()
+    for path in paths or []:
+        if path and path not in seen:
+            uniq.append(path)
+            seen.add(path)
+    return sorted(uniq, key=_uvc_alias_sort_key)
+
+def _finalize_uvc_inventory_item(item: dict):
+    aliases = _prefer_capture_aliases(item.get("aliases", []))
+    if not aliases:
+        return None
+    primary = aliases[0]
+    node = os.path.realpath(primary)
+    info = _usb_info_from_node(node)
+    item["aliases"] = aliases
+    item["path"] = primary
+    item["node"] = node
+    item["name"] = _v4l_name_for_node(node)
+    item["busnum"] = info["busnum"]
+    item["devpath"] = info["devpath"]
+    item["capture_rank"] = _uvc_path_capture_rank(primary)
+    return item
+
+def _find_uvc_inventory_item(device: str):
+    device = str(device or "")
+    real = os.path.realpath(device) if device else ""
+    for item in discover_uvc_inventory(limit=64):
+        aliases = item.get("aliases", [])
+        if device == item.get("path") or device in aliases:
+            return item
+        if real and (real == os.path.realpath(item.get("path", ""))):
+            return item
+        for alias in aliases:
+            if real and real == os.path.realpath(alias):
+                return item
+    return None
+
+def _candidate_uvc_paths(device: str, include_secondary_aliases=False) -> list:
+    item = _find_uvc_inventory_item(device)
+    if item:
+        aliases = list(item.get("aliases", []))
+    else:
+        aliases = [str(device)]
+    if include_secondary_aliases:
+        return aliases
+    preferred = [p for p in aliases if _uvc_path_capture_rank(p) < 2]
+    return preferred or aliases[:1]
+
 def discover_uvc_index0(limit=4) -> list:
     found = {}
     links = sorted(glob.glob("/dev/v4l/by-path/*video-index0"))
@@ -131,36 +239,27 @@ def discover_uvc_inventory(limit=12) -> list:
         if _is_realsense_name(name):
             continue
         base = _canon_usb_alias(re.sub(r"-video-index[01]$", "", link))
-        info = _usb_info_from_node(node)
         item = bypath_groups.setdefault(base, {
-            "path": link,
-            "node": node,
-            "name": name,
-            "busnum": info["busnum"],
-            "devpath": info["devpath"],
             "aliases": [],
             "source": "by-path",
         })
         item["aliases"].append(link)
         covered_nodes.add(node)
-        if _camera_path_rank(link) < _camera_path_rank(item["path"]):
-            item["path"] = link
-            item["node"] = node
-            item["name"] = name
-            item["busnum"] = info["busnum"]
-            item["devpath"] = info["devpath"]
 
     out = []
     for base in sorted(bypath_groups):
-        item = bypath_groups[base]
-        item["aliases"] = sorted(set(item["aliases"]), key=_camera_path_rank)
-        out.append(item)
+        item = _finalize_uvc_inventory_item(bypath_groups[base])
+        if item is not None:
+            out.append(item)
 
     for node in sorted(glob.glob("/dev/video[0-9]*"), key=_video_node_sort_key):
         if node in covered_nodes:
             continue
         name = _v4l_name_for_node(node)
         if _is_realsense_name(name):
+            continue
+        capture_rank = _uvc_path_capture_rank(node)
+        if capture_rank >= 2:
             continue
         info = _usb_info_from_node(node)
         out.append({
@@ -171,8 +270,18 @@ def discover_uvc_inventory(limit=12) -> list:
             "devpath": info["devpath"],
             "aliases": [node],
             "source": "direct",
+            "capture_rank": capture_rank,
         })
 
+    out = sorted(
+        out,
+        key=lambda item: (
+            item.get("capture_rank", 1),
+            item.get("busnum", ""),
+            item.get("devpath", ""),
+            item.get("path", ""),
+        ),
+    )
     return out[:limit]
 
 def find_uvc_devices(limit=2):
@@ -238,11 +347,6 @@ class UvcThread(threading.Thread):
             return "----"
 
     def _dev_arg_for_backend(self, dev_path, backend):
-        if backend == "v4l2" and isinstance(dev_path, str):
-            real = os.path.realpath(dev_path)
-            m = re.match(r"^/dev/video(\d+)$", real)
-            if m:
-                return int(m.group(1))
         return dev_path
 
     def _open_resilient_once(self, dev_path, width, height, fps, backend, fourcc, warmup_reads=30):
@@ -306,11 +410,10 @@ class UvcThread(threading.Thread):
         self._stop_event.set()
 
     def run(self):
-        paths_to_try = [self.device]
-        if self.try_index1_fallback and isinstance(self.device, str) and self.device.endswith("video-index0"):
-            alt = re.sub(r"video-index0$", "video-index1", self.device)
-            if os.path.exists(alt):
-                paths_to_try.append(alt)
+        paths_to_try = _candidate_uvc_paths(self.device, include_secondary_aliases=self.try_index1_fallback)
+        if self.device and self.device not in paths_to_try:
+            paths_to_try.insert(0, self.device)
+        paths_to_try = _prefer_capture_aliases(paths_to_try)
 
         cap = None
         chosen_path = None
@@ -355,7 +458,12 @@ class UvcThread(threading.Thread):
                         cap = None
                         self._status = f"{self.name}: lost frames, reopening…"
                         time.sleep(0.2)
-                        cap, warm_frame, meta = self._open_resilient(chosen_path)
+                        reopen_paths = [chosen_path] + [p for p in paths_to_try if p != chosen_path]
+                        for retry_path in reopen_paths:
+                            cap, warm_frame, meta = self._open_resilient(retry_path)
+                            if cap is not None:
+                                chosen_path = retry_path
+                                break
                         if cap is None:
                             self._status = f"{self.name}: reopen failed (still no frames)"
                             time.sleep(0.5)
@@ -892,7 +1000,7 @@ def show_startup_launcher(args):
 
     ttk.Label(
         frame,
-        text="Leave a UVC path blank to use auto-detect. The inventory below shows what Linux currently exposes.",
+        text="Leave a UVC path blank to use auto-detect. The inventory below shows the UVC camera groups Linux currently exposes.",
         wraplength=640,
     ).grid(row=5, column=0, columnspan=4, sticky="w", pady=(4, 0))
 
@@ -949,11 +1057,11 @@ def show_startup_launcher(args):
         inventory_text.insert("1.0", "\n".join(lines))
         inventory_text.configure(state="disabled")
         if len(inventory) >= 2:
-            status_var.set(f"{len(inventory)} UVC camera paths detected.")
+            status_var.set(f"{len(inventory)} UVC camera groups detected.")
         elif len(inventory) == 1:
-            status_var.set("Only 1 UVC camera path was detected. You can still start with one camera.")
+            status_var.set("Only 1 UVC camera group was detected. You can still start with one camera.")
         else:
-            status_var.set("No UVC camera paths were detected. Start only if you expect placeholders.")
+            status_var.set("No UVC camera groups were detected. Start only if you expect placeholders.")
 
     def cancel():
         root.destroy()
@@ -5127,7 +5235,7 @@ def main():
             uvc1_path = (cands[0]["path"] if len(cands) >= 1 else "")
             uvc2_path = (cands[1]["path"] if len(cands) >= 2 else "")
             if len(cands) == 1:
-                print("[UVC auto-pick] Only one UVC camera path was detected.")
+                print("[UVC auto-pick] Only one UVC camera group was detected.")
                 print(f"  Cam1: {_format_uvc_inventory_label(cands[0])}")
 
     if uvc1_path and uvc2_path and os.path.realpath(uvc1_path) == os.path.realpath(uvc2_path):
