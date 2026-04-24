@@ -520,6 +520,12 @@ def _axis(joy, idx, invert=False):
         v = 0.0
     return -v if invert else v
 
+def _apply_deadzone(v: float, dz: float) -> float:
+    av = abs(float(v))
+    if av <= dz:
+        return 0.0
+    return float(np.sign(v) * ((av - dz) / max(1e-9, 1.0 - dz)))
+
 A_BUTTON       = 0
 B_BUTTON       = 1
 X_BUTTON       = 2
@@ -2237,6 +2243,10 @@ class RobotThread(threading.Thread):
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 20.0
         self.live_next_send_t = 0.0
+        self.orient_deadzone = 0.18
+        self.last_j4_poll = None
+        self.last_j4_poll_t = None
+        self.j4_jump_guard_deg = 1.5
 
     def _play_live(self, cmd: dict):
         """
@@ -3726,10 +3736,13 @@ class RobotThread(threading.Thread):
                 sens   = self.state.levels[self.state.idx]
                 waiting = self.state.await_confirm
 
+            rx = _apply_deadzone(rx, self.orient_deadzone)
+            ry = _apply_deadzone(ry, self.orient_deadzone)
             sx, sj5, sb, sc, sh = (5.0*sens, 5.0*sens, 0.5*sens, 0.5*sens, 5.0*sens)
             manual_enabled = (time.time() >= self.skip_manual_until) and (not waiting)
             live_motion_cmd_sent = False
             live_motion_requested = False
+            orientation_requested = False
             lmove_changed = False
 
             if manual_enabled and abs(ly) > self.DZ:
@@ -3766,10 +3779,12 @@ class RobotThread(threading.Thread):
                     self.R = axis_angle_to_R(0, 0, -rx_eff * sc * loop_dt) @ self.R
                     self.R = orthonormalize_R(self.R)
                     moved = True
+                    orientation_requested = True
                 if abs(ry_eff) > self.DZ:
                     self.R = self.R @ axis_angle_to_R(0, ry_eff * sb * loop_dt, 0)
                     self.R = orthonormalize_R(self.R)
                     moved = True
+                    orientation_requested = True
 
             if moved:
                 lmove_changed = True
@@ -3878,6 +3893,29 @@ class RobotThread(threading.Thread):
                 joints = self._try_get_current_joints()
                 with self.state.lock:
                     self.state.last_joints = joints
+                now_joint_t = time.time()
+                if joints is not None:
+                    j4_now = float(joints.get("j4", 0.0))
+                    if (
+                        manual_enabled
+                        and (live_motion_requested or self.live_motion_active)
+                        and not orientation_requested
+                        and self.last_j4_poll is not None
+                        and self.last_j4_poll_t is not None
+                    ):
+                        dj4 = j4_now - self.last_j4_poll
+                        if abs(dj4) >= self.j4_jump_guard_deg:
+                            print(
+                                f"[Guard] Unexpected j4 jump {dj4:+.3f} deg without wrist input; "
+                                "halting live motion to avoid slip."
+                            )
+                            self._reset_live_motion_pending()
+                            self._halt_live_motion()
+                            self.live_motion_active = False
+                            self.skip_manual_until = max(self.skip_manual_until, time.time() + 0.35)
+                            self.last_pose_refresh = 0.0
+                    self.last_j4_poll = j4_now
+                    self.last_j4_poll_t = now_joint_t
                 joint_poll_time = time.time()
 
         if not self.keep_motors_on_exit:
