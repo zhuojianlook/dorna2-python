@@ -2525,6 +2525,7 @@ class RobotThread(threading.Thread):
         self.live_rel_abc_pending = np.zeros(3, dtype=float)
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 40.0
+        self.live_send_interval_tool_axis = 1.0 / 80.0
         self.live_next_send_t = 0.0
         self.live_last_send_t = 0.0
         self.live_last_abs_pose = None
@@ -2533,10 +2534,6 @@ class RobotThread(threading.Thread):
         self.live_j5_epsilon = 0.01
         self.live_halt_accel = 8.0
         self.live_halt_accel_translation = 12.0
-        self.live_tool_axis_max_lead = 0.35
-        self.live_pose_sample_interval = 0.05
-        self.live_last_feedback_xyz = None
-        self.live_last_feedback_t = 0.0
         self.live_last_motion_mode = None
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
@@ -2558,45 +2555,6 @@ class RobotThread(threading.Thread):
             self.robot.halt(accel=accel, timeout=0)
         except Exception:
             pass
-
-    def _sample_live_pose_xyz(self, now_t: float):
-        if (
-            self.live_last_feedback_xyz is not None
-            and (now_t - self.live_last_feedback_t) < self.live_pose_sample_interval
-        ):
-            return self.live_last_feedback_xyz.copy()
-
-        try:
-            pose = self.robot.get_all_pose()[:3]
-            xyz = np.array([float(v) for v in pose], dtype=float)
-            self.live_last_feedback_xyz = xyz
-            self.live_last_feedback_t = now_t
-            return xyz.copy()
-        except Exception:
-            if self.live_last_feedback_xyz is not None:
-                return self.live_last_feedback_xyz.copy()
-            return None
-
-    def _limit_tool_axis_target_lead(self, axis_vec, now_t: float):
-        axis = np.array(axis_vec, dtype=float)
-        axis_norm = float(np.linalg.norm(axis))
-        if axis_norm <= 1e-9:
-            return
-        axis /= axis_norm
-
-        actual_xyz = self._sample_live_pose_xyz(now_t)
-        if actual_xyz is None:
-            return
-
-        target_xyz = np.array([self.x0, self.y0, self.z0], dtype=float)
-        delta_xyz = target_xyz - actual_xyz
-        lead = float(np.dot(delta_xyz, axis))
-        clamped_lead = float(np.clip(lead, -self.live_tool_axis_max_lead, self.live_tool_axis_max_lead))
-        if abs(clamped_lead - lead) <= 1e-9:
-            return
-
-        corrected_xyz = actual_xyz + (delta_xyz - axis * lead) + axis * clamped_lead
-        self.x0, self.y0, self.z0 = [float(v) for v in corrected_xyz]
 
     def _preprocess_left_stick(self, lx: float, ly: float):
         lx = _apply_deadzone(lx, self.left_stick_deadzone)
@@ -2689,8 +2647,6 @@ class RobotThread(threading.Thread):
             self.j5v = float(joints["j5"])
             with self.state.lock:
                 self.state.j5 = self.j5v
-        self.live_last_feedback_xyz = np.array([self.x0, self.y0, self.z0], dtype=float)
-        self.live_last_feedback_t = time.time()
         self.live_last_motion_mode = None
 
     def _reset_live_motion_pending(self):
@@ -2704,11 +2660,12 @@ class RobotThread(threading.Thread):
         self.live_last_abs_pose = None
 
     def _flush_live_motion(self, now_t: float):
+        send_interval = self.live_send_interval_tool_axis if self.live_last_motion_mode == "tool_axis_translation" else self.live_send_interval
         if now_t < self.live_next_send_t:
             return False
 
         sent = False
-        segment_dt = self.live_send_interval
+        segment_dt = send_interval
         if self.live_last_send_t > 0.0:
             segment_dt = max(1e-3, now_t - self.live_last_send_t)
 
@@ -2800,7 +2757,7 @@ class RobotThread(threading.Thread):
             sent = True
 
         if sent:
-            self.live_next_send_t = now_t + self.live_send_interval
+            self.live_next_send_t = now_t + send_interval
             self.live_last_send_t = now_t
 
         return sent
@@ -4266,9 +4223,8 @@ class RobotThread(threading.Thread):
                     self.y0 += dy
                     self.z0 += dz
                     # Use absolute TCP targets for the main tool-axis live motion
-                    # path so release latency does not grow with queued relative
-                    # translation segments during a long hold.
-                    self._limit_tool_axis_target_lead(tz, now)
+                    # path, but avoid active pose pullback feedback here because
+                    # it can introduce visible oscillation.
                     self.live_abs_pose_dirty = True
                     self.live_last_motion_mode = "tool_axis_translation"
                     live_motion_requested = True
