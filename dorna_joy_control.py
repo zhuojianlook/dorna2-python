@@ -2263,11 +2263,12 @@ class RobotThread(threading.Thread):
 
     def _soft_stop_live_motion(self):
         """
-        Release live manual motion by resyncing the cached target to the robot's
-        current pose without sending an extra stop command. Sending a final
-        absolute lmove here can arrive behind the last streamed target and cause
-        a visible reverse correction on stick release.
+        Release live manual motion with a controller-side halt, then resync the
+        cached pose. This stops the arm promptly on stick release without
+        queuing an extra absolute lmove that can reverse the motion.
         """
+        self._halt_live_motion()
+
         stop_pose = None
         try:
             stop_pose = self.robot.get_all_pose()[:6]
@@ -3908,12 +3909,12 @@ class RobotThread(threading.Thread):
                     self._reset_live_motion_pending()
                     self._soft_stop_live_motion()
                     self.live_motion_active = False
-                    self.last_pose_refresh = time.time()
+                    self.last_pose_refresh = 0.0
             else:
                 if self.live_motion_active:
                     self._reset_live_motion_pending()
                     self._soft_stop_live_motion()
-                    self.last_pose_refresh = time.time()
+                    self.last_pose_refresh = 0.0
                 else:
                     self._reset_live_motion_pending()
                 self.live_motion_active = False
