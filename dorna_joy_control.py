@@ -64,12 +64,21 @@ def _usb_info_from_node(node: str) -> dict:
                 "busnum": _read_text(os.path.join(cur, "busnum")) or "",
                 "devpath": _read_text(os.path.join(cur, "devpath")) or "",
                 "speed": _read_text(os.path.join(cur, "speed")) or "",
+                "serial": _read_text(os.path.join(cur, "serial")) or "",
+                "product": _read_text(os.path.join(cur, "product")) or "",
+                "manufacturer": _read_text(os.path.join(cur, "manufacturer")) or "",
+                "vendor_id": _read_text(os.path.join(cur, "idVendor")) or "",
+                "model_id": _read_text(os.path.join(cur, "idProduct")) or "",
             }
         parent = os.path.dirname(cur)
         if parent == cur:
             break
         cur = parent
-    return {"busnum":"", "devpath":"", "speed":""}
+    return {
+        "busnum":"", "devpath":"", "speed":"",
+        "serial":"", "product":"", "manufacturer":"",
+        "vendor_id":"", "model_id":""
+    }
 
 def _canon_usb_alias(path: str) -> str:
     return re.sub(r"-usbv[23]-", "-usb-", path)
@@ -95,6 +104,17 @@ def _camera_path_rank(path: str):
 def _video_node_sort_key(path: str):
     m = re.match(r"^/dev/video(\d+)$", str(path))
     return int(m.group(1)) if m else 9999
+
+def _extract_usb_port_path(path: str) -> str:
+    path = str(path or "")
+    m = re.search(r"-usb(?:v[23])?-(.+)-video-index\d+$", path)
+    return (m.group(1) if m else "")
+
+def _short_serial(serial: str) -> str:
+    serial = str(serial or "").strip()
+    if not serial:
+        return ""
+    return serial.rsplit("_", 1)[-1]
 
 def _v4l2_caps_text(node: str) -> str:
     node = os.path.realpath(str(node))
@@ -172,6 +192,13 @@ def _finalize_uvc_inventory_item(item: dict):
     item["name"] = _v4l_name_for_node(node)
     item["busnum"] = info["busnum"]
     item["devpath"] = info["devpath"]
+    item["serial"] = info["serial"]
+    item["serial_short"] = _short_serial(info["serial"])
+    item["vendor_id"] = info["vendor_id"]
+    item["model_id"] = info["model_id"]
+    item["product"] = info["product"]
+    item["manufacturer"] = info["manufacturer"]
+    item["port_path"] = _extract_usb_port_path(primary) or info["devpath"]
     item["capture_rank"] = _uvc_path_capture_rank(primary)
     return item
 
@@ -270,6 +297,13 @@ def discover_uvc_inventory(limit=12) -> list:
             "devpath": info["devpath"],
             "aliases": [node],
             "source": "direct",
+            "serial": info["serial"],
+            "serial_short": _short_serial(info["serial"]),
+            "vendor_id": info["vendor_id"],
+            "model_id": info["model_id"],
+            "product": info["product"],
+            "manufacturer": info["manufacturer"],
+            "port_path": info["devpath"],
             "capture_rank": capture_rank,
         })
 
@@ -910,11 +944,26 @@ def save_startup_settings(settings, path=STARTUP_SETTINGS_PATH):
 def _format_uvc_inventory_label(item: dict) -> str:
     base = f"{item.get('name', 'Unknown')} [{os.path.basename(item.get('node', ''))}]"
     src = item.get("path", "")
-    if item.get("busnum") or item.get("devpath"):
-        base += f" bus={item.get('busnum', '')} devpath={item.get('devpath', '')}"
+    details = []
+    if item.get("port_path"):
+        details.append(f"port={item.get('port_path')}")
+    elif item.get("busnum") or item.get("devpath"):
+        details.append(f"bus={item.get('busnum', '')} devpath={item.get('devpath', '')}")
+    if item.get("serial_short"):
+        details.append(f"serial={item.get('serial_short')}")
+    if item.get("vendor_id") and item.get("model_id"):
+        details.append(f"usb={item.get('vendor_id')}:{item.get('model_id')}")
+    if details:
+        base += " " + " ".join(details)
     if src:
         base += f" via {src}"
     return base
+
+def _format_uvc_selected_path(path: str) -> str:
+    item = _find_uvc_inventory_item(path)
+    if item is not None:
+        return _format_uvc_inventory_label(item)
+    return str(path or "")
 
 def _resolve_startup_args(args, settings):
     args.host = str(args.host or settings.get("startup_host", DEFAULT_DORNA_HOST) or DEFAULT_DORNA_HOST)
@@ -5250,7 +5299,7 @@ def main():
         )
         uvc1.start()
         uvc_threads.append(uvc1)
-        print(f"[UVC#1] {uvc1_path}")
+        print(f"[UVC#1] {_format_uvc_selected_path(uvc1_path)}")
     else:
         uvc1 = None
         print("[UVC#1] Not found (placeholder)")
@@ -5262,7 +5311,7 @@ def main():
         )
         uvc2.start()
         uvc_threads.append(uvc2)
-        print(f"[UVC#2] {uvc2_path}")
+        print(f"[UVC#2] {_format_uvc_selected_path(uvc2_path)}")
     else:
         uvc2 = None
         print("[UVC#2] Not found (placeholder)")
