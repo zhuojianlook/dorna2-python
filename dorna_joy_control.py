@@ -2252,6 +2252,7 @@ class RobotThread(threading.Thread):
         self.live_j5_pending = 0.0
         self.live_send_interval = 1.0 / 40.0
         self.live_next_send_t = 0.0
+        self.live_last_send_t = 0.0
         self.live_halt_accel = 8.0
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
@@ -2361,12 +2362,16 @@ class RobotThread(threading.Thread):
         self.live_rel_abc_pending.fill(0.0)
         self.live_j5_pending = 0.0
         self.live_next_send_t = 0.0
+        self.live_last_send_t = 0.0
 
     def _flush_live_motion(self, now_t: float):
         if now_t < self.live_next_send_t:
             return False
 
         sent = False
+        segment_dt = self.live_send_interval
+        if self.live_last_send_t > 0.0:
+            segment_dt = max(1e-3, now_t - self.live_last_send_t)
 
         if abs(self.live_j5_pending) > 1e-9:
             delta = self.live_j5_pending
@@ -2381,6 +2386,9 @@ class RobotThread(threading.Thread):
             da, db, dc = [float(v) for v in self.live_rel_abc_pending]
             self.live_rel_xyz_pending.fill(0.0)
             self.live_rel_abc_pending.fill(0.0)
+            linear_speed = rel_xyz_norm / segment_dt if rel_xyz_norm > 1e-9 else 0.0
+            angular_speed = rel_abc_norm / segment_dt if rel_abc_norm > 1e-9 else 0.0
+            cmd_vel = max(0.2, linear_speed, angular_speed)
             self._play_live({
                 "cmd": "lmove",
                 "rel": 1,
@@ -2390,7 +2398,7 @@ class RobotThread(threading.Thread):
                 "a": da,
                 "b": db,
                 "c": dc,
-                "vel": self.VT if rel_xyz_norm > 1e-9 else self.VR,
+                "vel": cmd_vel,
                 "cont": 1,
             })
             tz = self.R[:,2]
@@ -2403,6 +2411,7 @@ class RobotThread(threading.Thread):
 
         if sent:
             self.live_next_send_t = now_t + self.live_send_interval
+            self.live_last_send_t = now_t
 
         return sent
 
