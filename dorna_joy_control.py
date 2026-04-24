@@ -2508,6 +2508,7 @@ class RobotThread(threading.Thread):
         self.left_stick_deadzone = 0.14
         self.left_stick_filter_alpha = 0.35
         self.left_stick_cmd_threshold = 0.01
+        self.left_stick_release_snap = 0.03
         self.left_stick_axis_margin = 0.08
         self.left_stick_lx_cmd = 0.0
         self.left_stick_ly_cmd = 0.0
@@ -2549,9 +2550,16 @@ class RobotThread(threading.Thread):
         except Exception:
             pass
 
-    def _shape_left_stick(self, lx: float, ly: float):
+    def _preprocess_left_stick(self, lx: float, ly: float):
         lx = _apply_deadzone(lx, self.left_stick_deadzone)
         ly = _apply_deadzone(ly, self.left_stick_deadzone)
+        if abs(lx) < self.left_stick_release_snap:
+            lx = 0.0
+        if abs(ly) < self.left_stick_release_snap:
+            ly = 0.0
+        return lx, ly
+
+    def _shape_left_stick(self, lx: float, ly: float):
 
         if lx == 0.0:
             self.left_stick_lx_cmd = 0.0
@@ -4179,13 +4187,14 @@ class RobotThread(threading.Thread):
                 sens   = self.state.levels[self.state.idx]
                 waiting = self.state.await_confirm
 
-            lx, ly = self._shape_left_stick(lx, ly)
+            lx_raw, ly_raw = self._preprocess_left_stick(lx, ly)
+            lx, ly = self._shape_left_stick(lx_raw, ly_raw)
             rx = _apply_deadzone(rx, self.orient_deadzone)
             ry = _apply_deadzone(ry, self.orient_deadzone)
             sx, sj5, sb, sc, sh = (5.0*sens, 5.0*sens, 0.5*sens, 0.5*sens, 5.0*sens)
             manual_enabled = (time.time() >= self.skip_manual_until) and (not waiting)
             if manual_enabled:
-                left_stick_mode = self._resolve_left_stick_mode(lx, ly)
+                left_stick_mode = self._resolve_left_stick_mode(lx_raw, ly_raw)
             else:
                 self.left_stick_mode = None
                 self.left_stick_lx_cmd = 0.0
