@@ -2255,6 +2255,9 @@ class RobotThread(threading.Thread):
         self.live_next_send_t = 0.0
         self.live_last_send_t = 0.0
         self.live_last_abs_pose = None
+        self.live_linear_epsilon = 0.01
+        self.live_angular_epsilon = 0.01
+        self.live_j5_epsilon = 0.01
         self.live_halt_accel = 8.0
         self.orient_deadzone = 0.18
         self.last_j4_poll = None
@@ -2382,7 +2385,7 @@ class RobotThread(threading.Thread):
             # The cached absolute TCP pose already includes this tool-axis change.
             self.live_j5_pending = 0.0
 
-        if abs(self.live_j5_pending) > 1e-9:
+        if abs(self.live_j5_pending) > self.live_j5_epsilon:
             delta = self.live_j5_pending
             self.live_j5_pending = 0.0
             self._play_live({"cmd":"jmove","rel":1,"j5":delta,"vel":self.VR,"cont":1})
@@ -2399,34 +2402,45 @@ class RobotThread(threading.Thread):
                 cur = np.array(pose_now, dtype=float)
                 linear_delta = float(np.linalg.norm(cur[:3] - prev[:3]))
                 angular_delta = float(np.linalg.norm(cur[3:] - prev[3:]))
-            cmd_vel = max(0.2, linear_delta / segment_dt, angular_delta / segment_dt)
-            self.live_rel_xyz_pending.fill(0.0)
-            self.live_rel_abc_pending.fill(0.0)
-            self._play_live({
-                "cmd": "lmove",
-                "rel": 0,
-                "x": pose_now[0],
-                "y": pose_now[1],
-                "z": pose_now[2],
-                "a": pose_now[3],
-                "b": pose_now[4],
-                "c": pose_now[5],
-                "vel": cmd_vel,
-                "cont": 1,
-            })
-            self.live_last_abs_pose = pose_now
-            tz = self.R[:,2]
-            pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
-            yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
-            with self.state.lock:
-                self.state.pitch = pitch
-                self.state.yaw = yaw_deg
-            self.live_abs_pose_dirty = False
-            sent = True
+            if (
+                linear_delta >= self.live_linear_epsilon
+                or angular_delta >= self.live_angular_epsilon
+                or self.live_last_abs_pose is None
+            ):
+                cmd_vel = max(0.2, linear_delta / segment_dt, angular_delta / segment_dt)
+                self.live_rel_xyz_pending.fill(0.0)
+                self.live_rel_abc_pending.fill(0.0)
+                self._play_live({
+                    "cmd": "lmove",
+                    "rel": 0,
+                    "x": pose_now[0],
+                    "y": pose_now[1],
+                    "z": pose_now[2],
+                    "a": pose_now[3],
+                    "b": pose_now[4],
+                    "c": pose_now[5],
+                    "vel": cmd_vel,
+                    "cont": 1,
+                })
+                self.live_last_abs_pose = pose_now
+                tz = self.R[:,2]
+                pitch = -np.degrees(np.arcsin(np.clip(tz[2], -1, 1)))
+                yaw_deg = np.degrees(np.arctan2(tz[1], tz[0]))
+                with self.state.lock:
+                    self.state.pitch = pitch
+                    self.state.yaw = yaw_deg
+                self.live_abs_pose_dirty = False
+                sent = True
 
         rel_xyz_norm = np.linalg.norm(self.live_rel_xyz_pending)
         rel_abc_norm = np.linalg.norm(self.live_rel_abc_pending)
-        if (not sent) and (rel_xyz_norm > 1e-9 or rel_abc_norm > 1e-9):
+        if (
+            (not sent)
+            and (
+                rel_xyz_norm >= self.live_linear_epsilon
+                or rel_abc_norm >= self.live_angular_epsilon
+            )
+        ):
             dx, dy, dz = [float(v) for v in self.live_rel_xyz_pending]
             da, db, dc = [float(v) for v in self.live_rel_abc_pending]
             self.live_rel_xyz_pending.fill(0.0)
