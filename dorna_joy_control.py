@@ -2930,6 +2930,35 @@ class RobotThread(threading.Thread):
             print(f"⚠️ Could not clear controller alarm during {context}: {e}")
             return False
 
+    def _wait_for_joint_settle(self, max_wait_s: float = 4.0, stable_for_s: float = 1.0, tol_deg: float = 0.05):
+        start = time.time()
+        stable_since = None
+        prev = None
+        while time.time() - start < max_wait_s:
+            joints = self._try_get_current_joints()
+            if joints is None:
+                time.sleep(0.05)
+                continue
+            cur = np.array([joints[f"j{i}"] for i in range(6)], dtype=float)
+            if prev is None:
+                prev = cur
+                stable_since = time.time()
+                time.sleep(0.05)
+                continue
+            max_delta = float(np.max(np.abs(cur - prev)))
+            prev = cur
+            if max_delta <= tol_deg:
+                if stable_since is None:
+                    stable_since = time.time()
+                if (time.time() - stable_since) >= stable_for_s:
+                    print(f"[Startup] Joints settled (max Δ={max_delta:.3f} deg).")
+                    return True
+            else:
+                stable_since = None
+            time.sleep(0.05)
+        print(f"[Startup] Joint settle timeout after {max_wait_s:.1f}s; leaving startup alarm disabled.")
+        return False
+
     def _apply_alarm_sensitivity(self, val: float, persist: bool = True):
         _, threshold, duration = _alarm_pid_from_sensitivity(val)
         self._apply_alarm_pid(threshold, duration, persist=persist)
@@ -4318,26 +4347,27 @@ class RobotThread(threading.Thread):
         try:
             if self.clear_alarm_on_launch:
                 self._clear_alarm_latch("after default move")
-            time.sleep(0.75)
-            try:
-                self._refresh_from_robot()
-            except Exception:
-                pass
-            self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
-            time.sleep(0.2)
-            startup_alarm_state = None
-            try:
-                startup_alarm_state = robot.get_alarm()
-            except Exception:
+            settled = self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
+            if settled:
+                try:
+                    self._refresh_from_robot()
+                except Exception:
+                    pass
+                self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
+                time.sleep(0.2)
                 startup_alarm_state = None
-            if startup_alarm_state not in (0, False, None):
-                if self.clear_alarm_on_launch:
-                    self._clear_alarm_latch("after startup re-arm")
-                print(
-                    "⚠️ Selected halt settings triggered immediately after startup; "
-                    "controller alarm left disabled for this session. "
-                    "Raise threshold/duration and re-test from the launcher."
-                )
+                try:
+                    startup_alarm_state = robot.get_alarm()
+                except Exception:
+                    startup_alarm_state = None
+                if startup_alarm_state not in (0, False, None):
+                    if self.clear_alarm_on_launch:
+                        self._clear_alarm_latch("after startup re-arm")
+                    print(
+                        "⚠️ Selected halt settings triggered immediately after startup; "
+                        "controller alarm left disabled for this session. "
+                        "Raise threshold/duration and re-test from the launcher."
+                    )
         except Exception as e:
             print(f"⚠️ Could not apply selected halt settings after startup move: {e}")
 
