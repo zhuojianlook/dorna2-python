@@ -4237,7 +4237,33 @@ class RobotThread(threading.Thread):
             except Exception:
                 pass
         try:
+            time.sleep(0.75)
+            try:
+                self._refresh_from_robot()
+            except Exception:
+                pass
             self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
+            time.sleep(0.2)
+            startup_alarm_ok = bool(robot.uid())
+            if not startup_alarm_ok:
+                try:
+                    robot.set_alarm(0)
+                except Exception:
+                    pass
+                with self.state.lock:
+                    self.state.settings["alarm_threshold"] = DEFAULT_PID_THRESHOLD_MAIN
+                    self.state.settings["alarm_duration"] = DEFAULT_PID_DURATION_MAIN
+                    self.state.alarm_threshold = DEFAULT_PID_THRESHOLD_MAIN
+                    self.state.alarm_duration = DEFAULT_PID_DURATION_MAIN
+                self._apply_alarm_pid(
+                    DEFAULT_PID_THRESHOLD_MAIN,
+                    DEFAULT_PID_DURATION_MAIN,
+                    persist=False,
+                )
+                print(
+                    "⚠️ Selected halt settings triggered immediately after startup; "
+                    "reverted to stock threshold=200 duration=10000 for this session."
+                )
         except Exception as e:
             print(f"⚠️ Could not apply selected halt settings after startup move: {e}")
 
