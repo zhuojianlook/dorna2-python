@@ -773,8 +773,8 @@ DEFAULT_PID_THRESHOLD_MIN = 1.0
 DEFAULT_PID_THRESHOLD_MAX = 400.0
 DEFAULT_PID_DURATION_MIN = 1.0
 DEFAULT_PID_DURATION_MAX = 20000.0
-HALT_TUNE_THRESHOLD_MIN = 14.0
-HALT_TUNE_DURATION_MIN = 1.0
+HALT_TUNE_THRESHOLD_MIN = 40.0
+HALT_TUNE_DURATION_MIN = 100.0
 HALT_TUNE_DURATION_MAX = 1000.0
 HALT_TUNE_MOVE_MM = 50.0
 HALT_TUNE_MOVE_VEL = 10.0
@@ -1675,7 +1675,7 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
     )
     _launcher_tune_log(
         progress_cb,
-        "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
+        "[HaltTune] Starting from the configured tune floor and increasing slowly until no alarm is met "
         f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
         f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)}).",
     )
@@ -3751,7 +3751,7 @@ class RobotThread(threading.Thread):
             f"Requested starting point threshold={int(requested_threshold)}, duration={int(requested_duration)}."
         )
         print(
-            "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
+            "[HaltTune] Starting from the configured tune floor and increasing slowly until no alarm is met "
             f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
             f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)})."
         )
