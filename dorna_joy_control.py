@@ -3045,7 +3045,10 @@ class RobotThread(threading.Thread):
         baseline_threshold, baseline_duration = _clamp_alarm_pid(threshold, duration)
         print(
             "[HaltTune] Auto-tuning at Default pose. "
-            f"Starting from threshold={int(baseline_threshold)}, duration={int(baseline_duration)}."
+            f"Upper bound threshold={int(baseline_threshold)}, duration={int(baseline_duration)}."
+        )
+        print(
+            "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met."
         )
 
         try:
@@ -3067,34 +3070,71 @@ class RobotThread(threading.Thread):
                 print("⚠️ [HaltTune] Stock halt settings were not stable at Default pose; aborting auto-tune.")
                 return None
 
-        safe_threshold = int(baseline_threshold)
-        safe_duration = int(baseline_duration)
+        def build_threshold_values(limit: int):
+            vals = [int(DEFAULT_PID_THRESHOLD_MIN)]
+            cur = vals[0]
+            limit = int(limit)
+            while cur < limit:
+                if cur < 10:
+                    step = 1
+                elif cur < 40:
+                    step = 2
+                elif cur < 100:
+                    step = 5
+                elif cur < 200:
+                    step = 10
+                else:
+                    step = 20
+                cur = min(limit, cur + step)
+                if cur != vals[-1]:
+                    vals.append(cur)
+            return vals
 
-        lo = int(DEFAULT_PID_THRESHOLD_MIN)
-        hi = safe_threshold
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if self._test_alarm_pid_candidate(mid, safe_duration, hold_s=0.75):
-                safe_threshold = mid
-                hi = mid
-            else:
-                lo = mid + 1
-        tuned_threshold = int(lo)
-        if not self._test_alarm_pid_candidate(tuned_threshold, safe_duration, hold_s=0.75):
-            tuned_threshold = int(safe_threshold)
+        def build_duration_values(limit: int):
+            vals = [int(DEFAULT_PID_DURATION_MIN)]
+            cur = vals[0]
+            limit = int(limit)
+            while cur < limit:
+                if cur < 10:
+                    step = 1
+                elif cur < 50:
+                    step = 5
+                elif cur < 100:
+                    step = 10
+                elif cur < 250:
+                    step = 25
+                elif cur < 500:
+                    step = 50
+                elif cur < 1000:
+                    step = 100
+                elif cur < 2500:
+                    step = 250
+                elif cur < 5000:
+                    step = 500
+                else:
+                    step = 1000
+                cur = min(limit, cur + step)
+                if cur != vals[-1]:
+                    vals.append(cur)
+            return vals
 
-        lo = int(DEFAULT_PID_DURATION_MIN)
-        hi = safe_duration
-        while lo < hi:
-            mid = (lo + hi) // 2
-            if self._test_alarm_pid_candidate(tuned_threshold, mid, hold_s=0.75):
-                safe_duration = mid
-                hi = mid
-            else:
-                lo = mid + 1
-        tuned_duration = int(lo)
-        if not self._test_alarm_pid_candidate(tuned_threshold, tuned_duration, hold_s=0.75):
-            tuned_duration = int(safe_duration)
+        tuned_threshold = int(baseline_threshold)
+        tuned_duration = int(baseline_duration)
+        found = False
+
+        for threshold_candidate in build_threshold_values(int(baseline_threshold)):
+            for duration_candidate in build_duration_values(int(baseline_duration)):
+                if self._test_alarm_pid_candidate(threshold_candidate, duration_candidate, hold_s=0.75):
+                    tuned_threshold = int(threshold_candidate)
+                    tuned_duration = int(duration_candidate)
+                    found = True
+                    break
+            if found:
+                break
+
+        if not found:
+            tuned_threshold = int(baseline_threshold)
+            tuned_duration = int(baseline_duration)
 
         self._apply_alarm_pid(tuned_threshold, tuned_duration, persist=persist)
         print(
