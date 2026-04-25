@@ -1337,6 +1337,389 @@ def _persist_startup_args(settings, args):
     settings["startup_show_launcher"] = bool(args.launcher)
     save_startup_settings(settings)
 
+
+class _AlarmEventLatch:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.latched = False
+        self.last_alarm_msg = None
+
+    def on_robot_event(self, msg, union=None, **kwargs):
+        if not isinstance(msg, dict):
+            return
+        if msg.get("cmd") != "alarm":
+            return
+        alarm_val = msg.get("alarm")
+        with self.lock:
+            if alarm_val in (1, 1.0, True):
+                self.latched = True
+                self.last_alarm_msg = dict(msg)
+            elif alarm_val in (0, 0.0, False):
+                self.latched = False
+                self.last_alarm_msg = dict(msg)
+
+    def clear_local(self):
+        with self.lock:
+            self.latched = False
+            self.last_alarm_msg = None
+
+    def is_latched(self):
+        with self.lock:
+            return bool(self.latched)
+
+    def last_message(self):
+        with self.lock:
+            return dict(self.last_alarm_msg) if isinstance(self.last_alarm_msg, dict) else None
+
+
+def _emit_launcher_tune_progress(progress_cb, kind: str, **payload):
+    if callable(progress_cb):
+        try:
+            progress_cb(kind, **payload)
+        except Exception:
+            pass
+
+
+def _launcher_tune_log(progress_cb, message: str):
+    print(message)
+    _emit_launcher_tune_progress(progress_cb, "log", message=str(message))
+
+
+def _launcher_try_get_current_joints(robot):
+    candidates = ["get_all_joint", "get_joint", "get_joints", "joints", "get_pos"]
+    joints = None
+    for name in candidates:
+        try:
+            if hasattr(robot, name):
+                res = getattr(robot, name)()
+                if isinstance(res, dict):
+                    vals = [res.get(k) for k in ["j0", "j1", "j2", "j3", "j4", "j5"]]
+                    if all(v is not None for v in vals):
+                        joints = vals
+                        break
+                    try:
+                        joints = [res[i] for i in range(6)]
+                        break
+                    except Exception:
+                        pass
+                elif isinstance(res, (list, tuple)) and len(res) >= 6:
+                    joints = list(res[:6])
+                    break
+        except Exception:
+            continue
+    if joints is None:
+        return None
+    return {
+        "j0": float(joints[0]),
+        "j1": float(joints[1]),
+        "j2": float(joints[2]),
+        "j3": float(joints[3]),
+        "j4": float(joints[4]),
+        "j5": float(joints[5]),
+    }
+
+
+def _launcher_wait_for_joint_settle(
+    robot,
+    progress_cb=None,
+    max_wait_s: float = 4.0,
+    stable_for_s: float = 1.0,
+    tol_deg: float = 0.05,
+):
+    start = time.time()
+    stable_since = None
+    prev = None
+    while time.time() - start < max_wait_s:
+        joints = _launcher_try_get_current_joints(robot)
+        if joints is None:
+            time.sleep(0.05)
+            continue
+        cur = np.array([joints[f"j{i}"] for i in range(6)], dtype=float)
+        if prev is None:
+            prev = cur
+            stable_since = time.time()
+            time.sleep(0.05)
+            continue
+        max_delta = float(np.max(np.abs(cur - prev)))
+        prev = cur
+        if max_delta <= tol_deg:
+            if stable_since is None:
+                stable_since = time.time()
+            if (time.time() - stable_since) >= stable_for_s:
+                _launcher_tune_log(progress_cb, f"[Startup] Joints settled (max Δ={max_delta:.3f} deg).")
+                return True
+        else:
+            stable_since = None
+        time.sleep(0.05)
+    _launcher_tune_log(
+        progress_cb,
+        f"[Startup] Joint settle timeout after {max_wait_s:.1f}s; launcher auto-tune aborted.",
+    )
+    return False
+
+
+def _launcher_clear_alarm_latch(robot, alarm_latch, context: str, progress_cb=None):
+    try:
+        stat = robot.set_alarm(0)
+        time.sleep(0.05)
+        alarm_latch.clear_local()
+        _launcher_tune_log(progress_cb, f"[Startup] Cleared controller alarm ({context}); stat={stat}")
+        return True
+    except Exception as e:
+        _launcher_tune_log(progress_cb, f"⚠️ Could not clear controller alarm during {context}: {e}")
+        return False
+
+
+def _launcher_apply_alarm_pid(robot, alarm_latch, threshold: float, duration: float, progress_cb=None):
+    threshold, duration = _clamp_alarm_pid(threshold, duration)
+    alarm_latch.clear_local()
+    try:
+        robot.set_alarm(0)
+        time.sleep(0.05)
+    except Exception:
+        pass
+    for axis in range(6):
+        robot.set_pid(index=axis, threshold=threshold, duration=duration)
+    _emit_launcher_tune_progress(
+        progress_cb,
+        "values",
+        threshold=int(threshold),
+        duration=int(duration),
+    )
+    _launcher_tune_log(
+        progress_cb,
+        f"[Halt] Settings applied (threshold={int(threshold)}, duration={int(duration)})",
+    )
+    return threshold, duration
+
+
+def _launcher_hold_without_alarm(alarm_latch, hold_s: float = 0.75, poll_s: float = 0.05):
+    end_t = time.time() + max(0.0, float(hold_s))
+    while time.time() < end_t:
+        if alarm_latch.is_latched():
+            return False
+        time.sleep(max(0.01, float(poll_s)))
+    return not alarm_latch.is_latched()
+
+
+def _build_alarm_threshold_values(limit: int):
+    vals = [int(DEFAULT_PID_THRESHOLD_MIN)]
+    cur = vals[0]
+    limit = int(limit)
+    while cur < limit:
+        if cur < 10:
+            step = 1
+        elif cur < 40:
+            step = 2
+        elif cur < 100:
+            step = 5
+        elif cur < 200:
+            step = 10
+        else:
+            step = 20
+        cur = min(limit, cur + step)
+        if cur != vals[-1]:
+            vals.append(cur)
+    return vals
+
+
+def _build_alarm_duration_values(limit: int):
+    vals = [int(DEFAULT_PID_DURATION_MIN)]
+    cur = vals[0]
+    limit = int(limit)
+    while cur < limit:
+        if cur < 10:
+            step = 1
+        elif cur < 50:
+            step = 5
+        elif cur < 100:
+            step = 10
+        elif cur < 250:
+            step = 25
+        elif cur < 500:
+            step = 50
+        elif cur < 1000:
+            step = 100
+        elif cur < 2500:
+            step = 250
+        elif cur < 5000:
+            step = 500
+        else:
+            step = 1000
+        cur = min(limit, cur + step)
+        if cur != vals[-1]:
+            vals.append(cur)
+    return vals
+
+
+def _launcher_test_alarm_pid_candidate(
+    robot,
+    alarm_latch,
+    threshold: float,
+    duration: float,
+    progress_cb=None,
+    hold_s: float = 0.75,
+):
+    threshold, duration = _clamp_alarm_pid(threshold, duration)
+    _launcher_tune_log(progress_cb, f"[HaltTune] Testing threshold={int(threshold)}, duration={int(duration)}")
+    _launcher_apply_alarm_pid(robot, alarm_latch, threshold, duration, progress_cb=progress_cb)
+    settled = _launcher_wait_for_joint_settle(
+        robot,
+        progress_cb=progress_cb,
+        max_wait_s=2.0,
+        stable_for_s=0.35,
+        tol_deg=0.05,
+    )
+    stable = bool(settled) and _launcher_hold_without_alarm(alarm_latch, hold_s=hold_s, poll_s=0.05)
+    if not stable:
+        alarm_msg = alarm_latch.last_message()
+        if alarm_msg:
+            _launcher_tune_log(progress_cb, f"[HaltTune] Alarm during test: {alarm_msg}")
+        _launcher_clear_alarm_latch(
+            robot,
+            alarm_latch,
+            f"after testing {int(threshold)}/{int(duration)}",
+            progress_cb=progress_cb,
+        )
+    return stable
+
+
+def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration: float, progress_cb=None):
+    baseline_threshold, baseline_duration = _clamp_alarm_pid(threshold, duration)
+    _launcher_tune_log(
+        progress_cb,
+        "[HaltTune] Auto-tuning in launcher: connect, move to Default, and search for the most sensitive stable halt settings.",
+    )
+    _launcher_tune_log(
+        progress_cb,
+        f"[HaltTune] Auto-tuning at Default pose. Upper bound threshold={int(baseline_threshold)}, duration={int(baseline_duration)}.",
+    )
+    _launcher_tune_log(
+        progress_cb,
+        "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met.",
+    )
+
+    alarm_latch = _AlarmEventLatch()
+    robot = Dorna(model="dorna_ta")
+    connected = False
+    try:
+        for attempt in range(5):
+            if robot.connect(host=host, port=port):
+                connected = True
+                break
+            _launcher_tune_log(
+                progress_cb,
+                f"⚠️ Connection attempt {attempt + 1}/5 to {host}:{port} failed. Retrying…",
+            )
+            time.sleep(2)
+        if not connected:
+            raise RuntimeError(f"All connection attempts to {host}:{port} failed.")
+
+        _launcher_tune_log(
+            progress_cb,
+            f"[Robot] Kinematic model: {getattr(robot, 'model', 'unknown')} (n_dof={getattr(robot.kinematic, 'n_dof', '?')})",
+        )
+        try:
+            robot.add_event(alarm_latch.on_robot_event)
+        except Exception as e:
+            _launcher_tune_log(progress_cb, f"⚠️ Could not register robot alarm event hook: {e}")
+
+        for axis in range(6):
+            robot.set_pid(
+                index=axis,
+                threshold=DEFAULT_PID_THRESHOLD_MAIN,
+                duration=DEFAULT_PID_DURATION_MAIN,
+            )
+        _launcher_clear_alarm_latch(robot, alarm_latch, "before motor enable", progress_cb=progress_cb)
+        robot.set_motor(1)
+
+        poses = load_poses()
+        default_pose = poses.get("Default", DEFAULT_POSES["Default"]).copy()
+        go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+        go.update(default_pose)
+        _launcher_tune_log(progress_cb, "[HaltTune] Moving to Default pose for launcher auto-tune.")
+        robot.play_dict(go)
+        _launcher_tune_log(progress_cb, "[Robot] Ready at Default for launcher auto-tune.")
+        _launcher_clear_alarm_latch(robot, alarm_latch, "after default move", progress_cb=progress_cb)
+        if not _launcher_wait_for_joint_settle(
+            robot,
+            progress_cb=progress_cb,
+            max_wait_s=4.0,
+            stable_for_s=1.0,
+            tol_deg=0.05,
+        ):
+            return None
+
+        if not _launcher_test_alarm_pid_candidate(
+            robot,
+            alarm_latch,
+            baseline_threshold,
+            baseline_duration,
+            progress_cb=progress_cb,
+            hold_s=0.75,
+        ):
+            _launcher_tune_log(progress_cb, "[HaltTune] Requested baseline was not stable; retrying from stock values.")
+            baseline_threshold = DEFAULT_PID_THRESHOLD_MAIN
+            baseline_duration = DEFAULT_PID_DURATION_MAIN
+            if not _launcher_test_alarm_pid_candidate(
+                robot,
+                alarm_latch,
+                baseline_threshold,
+                baseline_duration,
+                progress_cb=progress_cb,
+                hold_s=0.75,
+            ):
+                _launcher_tune_log(
+                    progress_cb,
+                    "⚠️ [HaltTune] Stock halt settings were not stable at Default pose; aborting auto-tune.",
+                )
+                return None
+
+        tuned_threshold = int(baseline_threshold)
+        tuned_duration = int(baseline_duration)
+        found = False
+
+        for threshold_candidate in _build_alarm_threshold_values(int(baseline_threshold)):
+            for duration_candidate in _build_alarm_duration_values(int(baseline_duration)):
+                if _launcher_test_alarm_pid_candidate(
+                    robot,
+                    alarm_latch,
+                    threshold_candidate,
+                    duration_candidate,
+                    progress_cb=progress_cb,
+                    hold_s=0.75,
+                ):
+                    tuned_threshold = int(threshold_candidate)
+                    tuned_duration = int(duration_candidate)
+                    found = True
+                    break
+            if found:
+                break
+
+        _launcher_apply_alarm_pid(
+            robot,
+            alarm_latch,
+            tuned_threshold,
+            tuned_duration,
+            progress_cb=progress_cb,
+        )
+        _launcher_tune_log(
+            progress_cb,
+            "[HaltTune] Selected most sensitive stable pair at Default pose: "
+            f"threshold={int(tuned_threshold)}, duration={int(tuned_duration)}",
+        )
+        return tuned_threshold, tuned_duration
+    finally:
+        try:
+            robot.set_motor(0)
+        except Exception:
+            pass
+        try:
+            robot.close()
+        except Exception:
+            pass
+        _launcher_tune_log(progress_cb, "[HaltTune] Launcher auto-tune worker disconnected from the robot.")
+
 def show_startup_launcher(args):
     if not os.environ.get("DISPLAY") and sys.platform not in ("win32", "darwin"):
         print("[Launcher] DISPLAY is not set; starting without the launcher UI.")
@@ -1394,7 +1777,10 @@ def show_startup_launcher(args):
     launcher_var = tk.BooleanVar(value=bool(args.launcher))
     status_var = tk.StringVar(value="Detecting cameras...")
     alarm_status_var = tk.StringVar(value="")
+    tune_status_var = tk.StringVar(value="Launcher auto-tune is idle.")
     option_paths = [""]
+    tune_queue = queue.Queue()
+    tune_state = {"running": False}
 
     frame = ttk.Frame(root, padding=14)
     frame.grid(row=0, column=0, sticky="nsew")
@@ -1460,7 +1846,12 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Apply halt settings on startup", variable=apply_halt_settings_var).grid(
         row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
-    ttk.Checkbutton(frame, text="Auto-tune halt at Default pose", variable=auto_tune_halt_var).grid(
+    auto_tune_check = ttk.Checkbutton(
+        frame,
+        text="Auto-tune halt at Default pose before starting",
+        variable=auto_tune_halt_var,
+    )
+    auto_tune_check.grid(
         row=10, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
     ttk.Label(frame, text="Halt threshold").grid(row=11, column=0, sticky="w", pady=(8, 0))
@@ -1491,26 +1882,35 @@ def show_startup_launcher(args):
     ttk.Label(frame, textvariable=alarm_status_var).grid(
         row=14, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
     )
+    ttk.Label(frame, text="Halt Auto-Tune Progress", font=("TkDefaultFont", 10, "bold")).grid(
+        row=15, column=0, columnspan=4, sticky="w", pady=(10, 0)
+    )
+    tune_text = tk.Text(frame, width=92, height=8, wrap="word")
+    tune_text.grid(row=16, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    tune_text.configure(state="disabled")
+    ttk.Label(frame, textvariable=tune_status_var).grid(
+        row=17, column=0, columnspan=4, sticky="w", pady=(0, 4)
+    )
     ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=15, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        row=18, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
     ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
-        row=16, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        row=19, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
 
-    ttk.Separator(frame).grid(row=17, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=20, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=18, column=0, columnspan=4, sticky="w"
+        row=21, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=19, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=22, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=20, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=23, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=21, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=24, column=0, columnspan=4, sticky="e", pady=(4, 0))
 
     def refresh_alarm_status(*_args):
         threshold, duration = _clamp_alarm_pid(
@@ -1564,15 +1964,45 @@ def show_startup_launcher(args):
         else:
             status_var.set("No UVC camera groups were detected. Start only if you expect placeholders.")
 
-    def cancel():
-        root.destroy()
+    def append_tune_log(message: str, reset: bool = False):
+        tune_text.configure(state="normal")
+        if reset:
+            tune_text.delete("1.0", "end")
+        tune_text.insert("end", str(message).rstrip() + "\n")
+        tune_text.see("end")
+        tune_text.configure(state="disabled")
 
-    def start():
+    def set_launcher_busy(is_busy: bool):
+        tune_state["running"] = bool(is_busy)
+        disabled = "disabled" if is_busy else None
+        controls = [
+            (host_entry, "normal"),
+            (port_entry, "normal"),
+            (uvc1_combo, "normal"),
+            (uvc2_combo, "normal"),
+            (uvc_quality_combo, "readonly"),
+            (rs_quality_combo, "readonly"),
+            (threshold_scale, "normal"),
+            (duration_scale, "normal"),
+            (halt_preset_combo, "readonly"),
+            (refresh_button, "normal"),
+            (cancel_button, "normal"),
+            (autotune_button, "normal"),
+            (start_button, "normal"),
+            (auto_tune_check, "normal"),
+        ]
+        for widget, enabled_state in controls:
+            try:
+                widget.configure(state="disabled" if is_busy else enabled_state)
+            except Exception:
+                pass
+
+    def collect_launch_settings():
         try:
             port = int(port_var.get().strip())
         except Exception:
             messagebox.showerror("Invalid port", "Port must be an integer.")
-            return
+            return None
         try:
             uvc_width, uvc_height, uvc_fps = _profile_values_from_label(
                 uvc_quality_var.get(), UVC_QUALITY_PRESETS,
@@ -1584,47 +2014,186 @@ def show_startup_launcher(args):
             )
         except Exception:
             messagebox.showerror("Invalid quality", "Choose valid UVC and RealSense quality profiles.")
-            return
+            return None
 
         host = host_var.get().strip() or DEFAULT_DORNA_HOST
         uvc1 = uvc1_var.get().strip()
         uvc2 = uvc2_var.get().strip()
         if uvc1 and uvc2 and os.path.realpath(uvc1) == os.path.realpath(uvc2):
             messagebox.showerror("Duplicate UVC selection", "UVC #1 and UVC #2 resolve to the same device.")
-            return
+            return None
 
-        args.host = host
-        args.port = port
-        args.uvc1 = uvc1
-        args.uvc2 = uvc2
-        args.uvc_width = uvc_width
-        args.uvc_height = uvc_height
-        args.uvc_fps = uvc_fps
-        args.rs_width = rs_width
-        args.rs_height = rs_height
-        args.rs_fps = rs_fps
-        args.uvc_try_index1 = bool(try_index1_var.get())
-        args.fullscreen = bool(fullscreen_var.get())
-        args.clear_alarm_startup = bool(clear_alarm_var.get())
-        args.apply_halt_settings_startup = bool(apply_halt_settings_var.get())
-        args.auto_tune_halt_startup = bool(auto_tune_halt_var.get())
-        args.alarm_threshold, args.alarm_duration = _clamp_alarm_pid(
+        alarm_threshold, alarm_duration = _clamp_alarm_pid(
             alarm_threshold_var.get(),
             alarm_duration_var.get(),
         )
-        args.launcher = bool(launcher_var.get())
+        return {
+            "host": host,
+            "port": port,
+            "uvc1": uvc1,
+            "uvc2": uvc2,
+            "uvc_width": uvc_width,
+            "uvc_height": uvc_height,
+            "uvc_fps": uvc_fps,
+            "rs_width": rs_width,
+            "rs_height": rs_height,
+            "rs_fps": rs_fps,
+            "uvc_try_index1": bool(try_index1_var.get()),
+            "fullscreen": bool(fullscreen_var.get()),
+            "clear_alarm_startup": bool(clear_alarm_var.get()),
+            "apply_halt_settings_startup": bool(apply_halt_settings_var.get()),
+            "auto_tune_halt_startup": bool(auto_tune_halt_var.get()),
+            "alarm_threshold": alarm_threshold,
+            "alarm_duration": alarm_duration,
+            "launcher": bool(launcher_var.get()),
+        }
+
+    def finalize_start(config: dict):
+        args.host = config["host"]
+        args.port = config["port"]
+        args.uvc1 = config["uvc1"]
+        args.uvc2 = config["uvc2"]
+        args.uvc_width = config["uvc_width"]
+        args.uvc_height = config["uvc_height"]
+        args.uvc_fps = config["uvc_fps"]
+        args.rs_width = config["rs_width"]
+        args.rs_height = config["rs_height"]
+        args.rs_fps = config["rs_fps"]
+        args.uvc_try_index1 = config["uvc_try_index1"]
+        args.fullscreen = config["fullscreen"]
+        args.clear_alarm_startup = config["clear_alarm_startup"]
+        args.apply_halt_settings_startup = config["apply_halt_settings_startup"]
+        args.auto_tune_halt_startup = config["auto_tune_halt_startup"]
+        args.alarm_threshold = config["alarm_threshold"]
+        args.alarm_duration = config["alarm_duration"]
+        args.launcher = config["launcher"]
         result["ok"] = True
         root.destroy()
 
-    ttk.Button(button_bar, text="Refresh Cameras", command=refresh_inventory).grid(row=0, column=0, padx=(0, 8))
-    ttk.Button(button_bar, text="Cancel", command=cancel).grid(row=0, column=1, padx=(0, 8))
-    ttk.Button(button_bar, text="Start Control", command=start).grid(row=0, column=2)
+    def begin_auto_tune(start_after: bool):
+        if tune_state["running"]:
+            return
+        config = collect_launch_settings()
+        if config is None:
+            return
+        append_tune_log(
+            "[Launcher] Starting auto-tune from the launcher window. The robot will move to Default before testing halt settings.",
+            reset=True,
+        )
+        tune_status_var.set("Connecting to robot and starting launcher auto-tune…")
+        set_launcher_busy(True)
+
+        def progress_cb(kind, **payload):
+            tune_queue.put({"kind": kind, **payload})
+
+        def worker():
+            try:
+                tuned = run_launcher_halt_autotune(
+                    config["host"],
+                    config["port"],
+                    config["alarm_threshold"],
+                    config["alarm_duration"],
+                    progress_cb=progress_cb,
+                )
+                tune_queue.put({
+                    "kind": "done",
+                    "ok": tuned is not None,
+                    "tuned": tuned,
+                    "config": config,
+                    "start_after": bool(start_after),
+                })
+            except Exception as e:
+                tune_queue.put({
+                    "kind": "done",
+                    "ok": False,
+                    "error": str(e),
+                    "config": config,
+                    "start_after": bool(start_after),
+                })
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def cancel():
+        if tune_state["running"]:
+            tune_status_var.set("Launcher auto-tune is still running. Wait for it to finish.")
+            return
+        root.destroy()
+
+    def start():
+        config = collect_launch_settings()
+        if config is None:
+            return
+        if config["auto_tune_halt_startup"]:
+            begin_auto_tune(start_after=True)
+            return
+        finalize_start(config)
+
+    def run_auto_tune_now():
+        begin_auto_tune(start_after=False)
+
+    def poll_tune_queue():
+        try:
+            while True:
+                item = tune_queue.get_nowait()
+                kind = item.get("kind")
+                if kind == "log":
+                    message = str(item.get("message", "")).rstrip()
+                    append_tune_log(message)
+                    tune_status_var.set(message or "Launcher auto-tune is running…")
+                elif kind == "values":
+                    alarm_threshold_var.set(float(item.get("threshold", alarm_threshold_var.get())))
+                    alarm_duration_var.set(float(item.get("duration", alarm_duration_var.get())))
+                    refresh_alarm_status()
+                elif kind == "done":
+                    set_launcher_busy(False)
+                    config = item.get("config") or {}
+                    tuned = item.get("tuned")
+                    if item.get("ok") and isinstance(tuned, (list, tuple)) and len(tuned) >= 2:
+                        threshold, duration = _clamp_alarm_pid(tuned[0], tuned[1])
+                        alarm_threshold_var.set(float(threshold))
+                        alarm_duration_var.set(float(duration))
+                        refresh_alarm_status()
+                        tune_status_var.set(
+                            f"Auto-tune complete. Selected threshold {int(threshold)}, duration {int(duration)}."
+                        )
+                        append_tune_log(
+                            f"[Launcher] Auto-tune complete. Selected threshold={int(threshold)}, duration={int(duration)}."
+                        )
+                        if bool(item.get("start_after")):
+                            config["alarm_threshold"] = threshold
+                            config["alarm_duration"] = duration
+                            config["auto_tune_halt_startup"] = False
+                            finalize_start(config)
+                            return
+                        auto_tune_halt_var.set(False)
+                    else:
+                        err = str(item.get("error") or "Launcher auto-tune did not find a stable halt setting.")
+                        tune_status_var.set(err)
+                        append_tune_log(f"⚠️ {err}")
+                        if bool(item.get("start_after")):
+                            messagebox.showerror("Auto-tune failed", err)
+        except queue.Empty:
+            pass
+        try:
+            root.after(100, poll_tune_queue)
+        except Exception:
+            pass
+
+    refresh_button = ttk.Button(button_bar, text="Refresh Cameras", command=refresh_inventory)
+    refresh_button.grid(row=0, column=0, padx=(0, 8))
+    cancel_button = ttk.Button(button_bar, text="Cancel", command=cancel)
+    cancel_button.grid(row=0, column=1, padx=(0, 8))
+    autotune_button = ttk.Button(button_bar, text="Auto-Tune Now", command=run_auto_tune_now)
+    autotune_button.grid(row=0, column=2, padx=(0, 8))
+    start_button = ttk.Button(button_bar, text="Start Control", command=start)
+    start_button.grid(row=0, column=3)
 
     refresh_inventory()
     refresh_alarm_status()
     threshold_scale.configure(command=lambda _v: refresh_alarm_status())
     duration_scale.configure(command=lambda _v: refresh_alarm_status())
     halt_preset_combo.bind("<<ComboboxSelected>>", apply_halt_preset)
+    root.after(100, poll_tune_queue)
     host_entry.focus_set()
     root.protocol("WM_DELETE_WINDOW", cancel)
     root.mainloop()
