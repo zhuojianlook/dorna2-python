@@ -770,6 +770,9 @@ DEFAULT_PID_THRESHOLD_MIN = 1.0
 DEFAULT_PID_THRESHOLD_MAX = 400.0
 DEFAULT_PID_DURATION_MIN = 1.0
 DEFAULT_PID_DURATION_MAX = 20000.0
+HALT_TUNE_THRESHOLD_MIN = 14.0
+HALT_TUNE_DURATION_MIN = 1.0
+HALT_TUNE_DURATION_MAX = 1000.0
 HALT_TUNE_MOVE_MM = 50.0
 HALT_TUNE_MOVE_VEL = 10.0
 HALT_TUNE_HOLD_S = 0.75
@@ -1521,7 +1524,7 @@ def _launcher_hold_without_alarm(alarm_latch, hold_s: float = 0.75, poll_s: floa
 
 
 def _build_alarm_threshold_values(limit: int):
-    vals = [int(DEFAULT_PID_THRESHOLD_MIN)]
+    vals = [int(HALT_TUNE_THRESHOLD_MIN)]
     cur = vals[0]
     limit = int(limit)
     while cur < limit:
@@ -1542,7 +1545,7 @@ def _build_alarm_threshold_values(limit: int):
 
 
 def _build_alarm_duration_values(limit: int):
-    vals = [int(DEFAULT_PID_DURATION_MIN)]
+    vals = [int(HALT_TUNE_DURATION_MIN)]
     cur = vals[0]
     limit = int(limit)
     while cur < limit:
@@ -1670,7 +1673,8 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
     _launcher_tune_log(
         progress_cb,
         "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
-        f"(up to threshold={int(DEFAULT_PID_THRESHOLD_MAX)}, duration={int(DEFAULT_PID_DURATION_MAX)}).",
+        f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
+        f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)}).",
     )
 
     alarm_latch = _AlarmEventLatch()
@@ -1724,7 +1728,7 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
         found = False
 
         for threshold_candidate in _build_alarm_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
-            for duration_candidate in _build_alarm_duration_values(int(DEFAULT_PID_DURATION_MAX)):
+            for duration_candidate in _build_alarm_duration_values(int(HALT_TUNE_DURATION_MAX)):
                 if _launcher_test_alarm_pid_candidate(
                     robot,
                     alarm_latch,
@@ -3745,7 +3749,8 @@ class RobotThread(threading.Thread):
         )
         print(
             "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
-            f"(up to threshold={int(DEFAULT_PID_THRESHOLD_MAX)}, duration={int(DEFAULT_PID_DURATION_MAX)})."
+            f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
+            f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)})."
         )
 
         try:
@@ -3763,7 +3768,7 @@ class RobotThread(threading.Thread):
             print(f"⚠️ [HaltTune] Could not confirm Default pose before tuning: {e}")
 
         def build_threshold_values(limit: int):
-            vals = [int(DEFAULT_PID_THRESHOLD_MIN)]
+            vals = [int(HALT_TUNE_THRESHOLD_MIN)]
             cur = vals[0]
             limit = int(limit)
             while cur < limit:
@@ -3783,7 +3788,7 @@ class RobotThread(threading.Thread):
             return vals
 
         def build_duration_values(limit: int):
-            vals = [int(DEFAULT_PID_DURATION_MIN)]
+            vals = [int(HALT_TUNE_DURATION_MIN)]
             cur = vals[0]
             limit = int(limit)
             while cur < limit:
@@ -3815,7 +3820,7 @@ class RobotThread(threading.Thread):
         found = False
 
         for threshold_candidate in build_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
-            for duration_candidate in build_duration_values(int(DEFAULT_PID_DURATION_MAX)):
+            for duration_candidate in build_duration_values(int(HALT_TUNE_DURATION_MAX)):
                 if self._test_alarm_pid_candidate(threshold_candidate, duration_candidate, hold_s=0.75):
                     tuned_threshold = int(threshold_candidate)
                     tuned_duration = int(duration_candidate)
