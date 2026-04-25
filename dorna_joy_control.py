@@ -1191,6 +1191,7 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_fullscreen": False,
         "startup_clear_alarm": True,
         "startup_apply_halt_settings": True,
+        "startup_auto_tune_halt": False,
         "startup_alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
         "startup_alarm_duration": DEFAULT_PID_DURATION_MAIN,
         "startup_show_launcher": True,
@@ -1242,6 +1243,16 @@ def save_startup_settings(settings, path=STARTUP_SETTINGS_PATH):
     except Exception as e:
         print(f"⚠️ Could not save startup settings to {path}: {e}")
 
+def save_startup_halt_settings(threshold, duration):
+    try:
+        settings = load_startup_settings()
+        threshold, duration = _clamp_alarm_pid(threshold, duration)
+        settings["startup_alarm_threshold"] = threshold
+        settings["startup_alarm_duration"] = duration
+        save_startup_settings(settings)
+    except Exception as e:
+        print(f"⚠️ Could not save startup halt settings: {e}")
+
 def _format_uvc_inventory_label(item: dict) -> str:
     base = f"{item.get('name', 'Unknown')} [{os.path.basename(item.get('node', ''))}]"
     src = item.get("path", "")
@@ -1285,6 +1296,8 @@ def _resolve_startup_args(args, settings):
         args.clear_alarm_startup = bool(settings.get("startup_clear_alarm", True))
     if getattr(args, "apply_halt_settings_startup", None) is None:
         args.apply_halt_settings_startup = bool(settings.get("startup_apply_halt_settings", True))
+    if getattr(args, "auto_tune_halt_startup", None) is None:
+        args.auto_tune_halt_startup = bool(settings.get("startup_auto_tune_halt", False))
     args.alarm_threshold = float(
         args.alarm_threshold
         if getattr(args, "alarm_threshold", None) is not None
@@ -1314,6 +1327,7 @@ def _persist_startup_args(settings, args):
     settings["startup_fullscreen"] = bool(args.fullscreen)
     settings["startup_clear_alarm"] = bool(getattr(args, "clear_alarm_startup", True))
     settings["startup_apply_halt_settings"] = bool(getattr(args, "apply_halt_settings_startup", True))
+    settings["startup_auto_tune_halt"] = bool(getattr(args, "auto_tune_halt_startup", False))
     threshold, duration = _clamp_alarm_pid(
         getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
         getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
@@ -1364,6 +1378,7 @@ def show_startup_launcher(args):
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
     clear_alarm_var = tk.BooleanVar(value=bool(getattr(args, "clear_alarm_startup", True)))
     apply_halt_settings_var = tk.BooleanVar(value=bool(getattr(args, "apply_halt_settings_startup", True)))
+    auto_tune_halt_var = tk.BooleanVar(value=bool(getattr(args, "auto_tune_halt_startup", False)))
     alarm_threshold_var = tk.DoubleVar(
         value=float(getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
     )
@@ -1445,23 +1460,26 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Apply halt settings on startup", variable=apply_halt_settings_var).grid(
         row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
-    ttk.Label(frame, text="Halt threshold").grid(row=10, column=0, sticky="w", pady=(8, 0))
+    ttk.Checkbutton(frame, text="Auto-tune halt at Default pose", variable=auto_tune_halt_var).grid(
+        row=10, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
+    ttk.Label(frame, text="Halt threshold").grid(row=11, column=0, sticky="w", pady=(8, 0))
     threshold_scale = ttk.Scale(
         frame,
         from_=DEFAULT_PID_THRESHOLD_MIN,
         to=DEFAULT_PID_THRESHOLD_MAX,
         variable=alarm_threshold_var,
     )
-    threshold_scale.grid(row=10, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
-    ttk.Label(frame, text="Halt duration").grid(row=11, column=0, sticky="w", pady=(4, 0))
+    threshold_scale.grid(row=11, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
+    ttk.Label(frame, text="Halt duration").grid(row=12, column=0, sticky="w", pady=(4, 0))
     duration_scale = ttk.Scale(
         frame,
         from_=DEFAULT_PID_DURATION_MIN,
         to=DEFAULT_PID_DURATION_MAX,
         variable=alarm_duration_var,
     )
-    duration_scale.grid(row=11, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
-    ttk.Label(frame, text="Halt preset").grid(row=12, column=0, sticky="w", pady=(4, 0))
+    duration_scale.grid(row=12, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
+    ttk.Label(frame, text="Halt preset").grid(row=13, column=0, sticky="w", pady=(4, 0))
     halt_preset_combo = ttk.Combobox(
         frame,
         textvariable=halt_preset_var,
@@ -1469,30 +1487,30 @@ def show_startup_launcher(args):
         width=28,
         state="readonly",
     )
-    halt_preset_combo.grid(row=12, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(4, 0))
+    halt_preset_combo.grid(row=13, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(4, 0))
     ttk.Label(frame, textvariable=alarm_status_var).grid(
-        row=13, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
+        row=14, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
     )
     ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=14, column=0, columnspan=4, sticky="w", pady=(4, 0)
-    )
-    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
         row=15, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
+    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+        row=16, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
 
-    ttk.Separator(frame).grid(row=16, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=17, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=17, column=0, columnspan=4, sticky="w"
+        row=18, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=18, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=19, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=19, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=20, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=20, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=21, column=0, columnspan=4, sticky="e", pady=(4, 0))
 
     def refresh_alarm_status(*_args):
         threshold, duration = _clamp_alarm_pid(
@@ -1589,6 +1607,7 @@ def show_startup_launcher(args):
         args.fullscreen = bool(fullscreen_var.get())
         args.clear_alarm_startup = bool(clear_alarm_var.get())
         args.apply_halt_settings_startup = bool(apply_halt_settings_var.get())
+        args.auto_tune_halt_startup = bool(auto_tune_halt_var.get())
         args.alarm_threshold, args.alarm_duration = _clamp_alarm_pid(
             alarm_threshold_var.get(),
             alarm_duration_var.get(),
@@ -2578,6 +2597,9 @@ def parse_args():
     p.add_argument("--apply-halt-settings-startup", dest="apply_halt_settings_startup", action="store_true", help="Apply halt threshold/duration automatically after startup settles")
     p.add_argument("--no-apply-halt-settings-startup", dest="apply_halt_settings_startup", action="store_false", help="Skip applying halt threshold/duration on startup")
     p.set_defaults(apply_halt_settings_startup=None)
+    p.add_argument("--auto-tune-halt-startup", dest="auto_tune_halt_startup", action="store_true", help="Auto-tune halt threshold/duration at Default pose during startup")
+    p.add_argument("--no-auto-tune-halt-startup", dest="auto_tune_halt_startup", action="store_false", help="Skip halt auto-tuning during startup")
+    p.set_defaults(auto_tune_halt_startup=None)
     p.add_argument("--alarm-threshold", type=float, default=None, help="Robot halt threshold")
     p.add_argument("--alarm-duration", type=float, default=None, help="Robot halt duration")
 
@@ -2825,6 +2847,7 @@ class RobotThread(threading.Thread):
         port: int,
         clear_alarm_on_launch: bool = True,
         apply_halt_settings_startup: bool = True,
+        auto_tune_halt_startup: bool = False,
     ):
         super().__init__(daemon=True)
         self.state      = state
@@ -2832,6 +2855,7 @@ class RobotThread(threading.Thread):
         self.port       = port
         self.clear_alarm_on_launch = bool(clear_alarm_on_launch)
         self.apply_halt_settings_startup = bool(apply_halt_settings_startup)
+        self.auto_tune_halt_startup = bool(auto_tune_halt_startup)
         self.stop_event = threading.Event()
         self.cmd_q      = queue.Queue()
         self.robot      = None
@@ -2940,6 +2964,7 @@ class RobotThread(threading.Thread):
             self.state.alarm_armed = True
         if persist:
             save_settings(self.state.settings)
+            save_startup_halt_settings(threshold, duration)
         print(
             f"[Halt] Settings applied "
             f"(threshold={int(threshold)}, duration={int(duration)})"
@@ -2990,6 +3015,93 @@ class RobotThread(threading.Thread):
     def _apply_alarm_sensitivity(self, val: float, persist: bool = True):
         _, threshold, duration = _alarm_pid_from_sensitivity(val)
         self._apply_alarm_pid(threshold, duration, persist=persist)
+
+    def _is_alarm_latched(self):
+        try:
+            state = self.robot.get_alarm()
+            return state not in (0, 0.0, False, None)
+        except Exception:
+            return False
+
+    def _hold_without_alarm(self, hold_s: float = 0.75, poll_s: float = 0.05):
+        end_t = time.time() + max(0.0, float(hold_s))
+        while time.time() < end_t:
+            if self._is_alarm_latched():
+                return False
+            time.sleep(max(0.01, float(poll_s)))
+        return not self._is_alarm_latched()
+
+    def _test_alarm_pid_candidate(self, threshold: float, duration: float, hold_s: float = 0.75):
+        threshold, duration = _clamp_alarm_pid(threshold, duration)
+        print(f"[HaltTune] Testing threshold={int(threshold)}, duration={int(duration)}")
+        self._apply_alarm_pid(threshold, duration, persist=False)
+        settled = self._wait_for_joint_settle(max_wait_s=2.0, stable_for_s=0.35, tol_deg=0.05)
+        stable = bool(settled) and self._hold_without_alarm(hold_s=hold_s, poll_s=0.05)
+        if not stable:
+            self._clear_alarm_latch(f"after testing {int(threshold)}/{int(duration)}")
+        return stable
+
+    def _auto_tune_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
+        baseline_threshold, baseline_duration = _clamp_alarm_pid(threshold, duration)
+        print(
+            "[HaltTune] Auto-tuning at Default pose. "
+            f"Starting from threshold={int(baseline_threshold)}, duration={int(baseline_duration)}."
+        )
+
+        try:
+            with self.state.lock:
+                default_pose = self.state.poses.get("Default", {}).copy()
+            if default_pose:
+                if self.current_named != "Default":
+                    if self._queue_jmove_to_pose(default_pose):
+                        self._set_current_named("Default")
+                self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
+        except Exception as e:
+            print(f"⚠️ [HaltTune] Could not confirm Default pose before tuning: {e}")
+
+        if not self._test_alarm_pid_candidate(baseline_threshold, baseline_duration, hold_s=0.75):
+            print("[HaltTune] Requested baseline was not stable; retrying from stock values.")
+            baseline_threshold = DEFAULT_PID_THRESHOLD_MAIN
+            baseline_duration = DEFAULT_PID_DURATION_MAIN
+            if not self._test_alarm_pid_candidate(baseline_threshold, baseline_duration, hold_s=0.75):
+                print("⚠️ [HaltTune] Stock halt settings were not stable at Default pose; aborting auto-tune.")
+                return None
+
+        safe_threshold = int(baseline_threshold)
+        safe_duration = int(baseline_duration)
+
+        lo = int(DEFAULT_PID_THRESHOLD_MIN)
+        hi = safe_threshold
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if self._test_alarm_pid_candidate(mid, safe_duration, hold_s=0.75):
+                safe_threshold = mid
+                hi = mid
+            else:
+                lo = mid + 1
+        tuned_threshold = int(lo)
+        if not self._test_alarm_pid_candidate(tuned_threshold, safe_duration, hold_s=0.75):
+            tuned_threshold = int(safe_threshold)
+
+        lo = int(DEFAULT_PID_DURATION_MIN)
+        hi = safe_duration
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if self._test_alarm_pid_candidate(tuned_threshold, mid, hold_s=0.75):
+                safe_duration = mid
+                hi = mid
+            else:
+                lo = mid + 1
+        tuned_duration = int(lo)
+        if not self._test_alarm_pid_candidate(tuned_threshold, tuned_duration, hold_s=0.75):
+            tuned_duration = int(safe_duration)
+
+        self._apply_alarm_pid(tuned_threshold, tuned_duration, persist=persist)
+        print(
+            "[HaltTune] Selected most sensitive stable pair at Default pose: "
+            f"threshold={int(tuned_threshold)}, duration={int(tuned_duration)}"
+        )
+        return tuned_threshold, tuned_duration
 
     def _collision_print(self, zone_name: str, context: str):
         zone_name = str(zone_name or "unnamed")
@@ -4376,7 +4488,9 @@ class RobotThread(threading.Thread):
             if self.clear_alarm_on_launch:
                 self._clear_alarm_latch("after default move")
             settled = self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
-            if not self.apply_halt_settings_startup:
+            if self.auto_tune_halt_startup and settled:
+                self._auto_tune_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=True)
+            elif not self.apply_halt_settings_startup:
                 print("[Startup] Skipped applying halt settings by launcher setting.")
             elif settled:
                 try:
@@ -4810,6 +4924,19 @@ class RobotThread(threading.Thread):
                             self._apply_alarm_pid(threshold, duration, persist=True)
                         except Exception as e:
                             print(f"⚠️ set_alarm_pid failed: {e}")
+                        continue
+
+                    elif typ == "auto_tune_alarm_pid":
+                        try:
+                            threshold = float(cmd.get("threshold", self.state.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN)))
+                            duration = float(cmd.get("duration", self.state.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN)))
+                        except Exception:
+                            threshold = DEFAULT_PID_THRESHOLD_MAIN
+                            duration = DEFAULT_PID_DURATION_MAIN
+                        try:
+                            self._auto_tune_alarm_pid(threshold, duration, persist=True)
+                        except Exception as e:
+                            print(f"⚠️ auto_tune_alarm_pid failed: {e}")
                         continue
 
                     elif typ == "disarm_alarm":
@@ -6365,6 +6492,7 @@ def main():
         port=args.port,
         clear_alarm_on_launch=bool(getattr(args, "clear_alarm_startup", True)),
         apply_halt_settings_startup=bool(getattr(args, "apply_halt_settings_startup", True)),
+        auto_tune_halt_startup=bool(getattr(args, "auto_tune_halt_startup", False)),
     )
     rt.start()
 
@@ -6716,6 +6844,7 @@ def main():
             {"label": "Save settings.json", "kind": "settings_save"},
             {"label": "Halt settings apply automatically on startup.", "kind": "alarm_status"},
             {"label": "Apply Halt Settings Now", "kind": "alarm_arm_now"},
+            {"label": "Auto-Tune Halt at Default", "kind": "alarm_auto_tune"},
             {"label": "Clear Latched Alarm", "kind": "alarm_disarm_now"},
             {"label": f"Halt threshold: {int(round(alarm_threshold))}", "kind": "alarm_threshold"},
             {"label": f"Halt duration: {int(round(alarm_duration))}", "kind": "alarm_duration"},
@@ -8474,6 +8603,12 @@ def main():
         m_ui    = max(8, int(tr_rect.w * 0.02))
         btn_w   = tr_rect.w - 2 * m_ui
         btn_gap = 8
+        if not alarm_threshold_drag:
+            with state.lock:
+                alarm_threshold_val = float(state.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
+        if not alarm_duration_drag:
+            with state.lock:
+                alarm_duration_val = float(state.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN))
         buttons = make_buttons(
             tool_lz,
             approach_mm,
@@ -9658,6 +9793,13 @@ def main():
                                 elif kind == "alarm_arm_now":
                                     rt.enqueue({
                                         "type": "set_alarm_pid",
+                                        "threshold": alarm_threshold_val,
+                                        "duration": alarm_duration_val,
+                                    })
+                                    click_pos = None
+                                elif kind == "alarm_auto_tune":
+                                    rt.enqueue({
+                                        "type": "auto_tune_alarm_pid",
                                         "threshold": alarm_threshold_val,
                                         "duration": alarm_duration_val,
                                     })
