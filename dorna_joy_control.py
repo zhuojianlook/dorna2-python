@@ -741,6 +741,10 @@ DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
 DEFAULT_PID_THRESHOLD_MAIN = 200.0
 DEFAULT_PID_DURATION_MAIN = 10000.0
+DEFAULT_PID_THRESHOLD_MIN = 40.0
+DEFAULT_PID_THRESHOLD_MAX = 400.0
+DEFAULT_PID_DURATION_MIN = 1000.0
+DEFAULT_PID_DURATION_MAX = 20000.0
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
 DEFAULT_SELF_COLLISION = {
@@ -898,9 +902,22 @@ def _alarm_pid_from_sensitivity(val: float):
     val = max(0.0, min(1.0, val))
     threshold_scale = 1.0 - 0.70 * val
     duration_scale = 1.0 - 0.75 * val
-    threshold = max(40.0, round(DEFAULT_PID_THRESHOLD_MAIN * threshold_scale))
-    duration = max(1000.0, round(DEFAULT_PID_DURATION_MAIN * duration_scale))
+    threshold = max(DEFAULT_PID_THRESHOLD_MIN, round(DEFAULT_PID_THRESHOLD_MAIN * threshold_scale))
+    duration = max(DEFAULT_PID_DURATION_MIN, round(DEFAULT_PID_DURATION_MAIN * duration_scale))
     return val, threshold, duration
+
+def _clamp_alarm_pid(threshold=None, duration=None):
+    try:
+        threshold = float(threshold)
+    except Exception:
+        threshold = DEFAULT_PID_THRESHOLD_MAIN
+    try:
+        duration = float(duration)
+    except Exception:
+        duration = DEFAULT_PID_DURATION_MAIN
+    threshold = round(max(DEFAULT_PID_THRESHOLD_MIN, min(DEFAULT_PID_THRESHOLD_MAX, threshold)))
+    duration = round(max(DEFAULT_PID_DURATION_MIN, min(DEFAULT_PID_DURATION_MAX, duration)))
+    return threshold, duration
 
 def load_poses(path=POSES_PATH):
     try:
@@ -928,7 +945,25 @@ def load_settings(path=SETTINGS_PATH):
         tool_center_demo_radius_mm = float(
             data.get("tool_center_demo_radius_mm", DEFAULT_TOOL_CENTER_RADIUS)
         )
-        alarm_sensitivity = float(data.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY))
+        legacy_alarm_sensitivity = None
+        if "alarm_sensitivity" in data:
+            try:
+                legacy_alarm_sensitivity = float(data.get("alarm_sensitivity"))
+            except Exception:
+                legacy_alarm_sensitivity = DEFAULT_ALARM_SENSITIVITY
+        if ("alarm_threshold" in data) or ("alarm_duration" in data):
+            alarm_threshold, alarm_duration = _clamp_alarm_pid(
+                data.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
+                data.get("alarm_duration", DEFAULT_PID_DURATION_MAIN),
+            )
+        elif legacy_alarm_sensitivity is not None:
+            _, alarm_threshold, alarm_duration = _alarm_pid_from_sensitivity(legacy_alarm_sensitivity)
+            alarm_threshold, alarm_duration = _clamp_alarm_pid(alarm_threshold, alarm_duration)
+        else:
+            alarm_threshold, alarm_duration = _clamp_alarm_pid(
+                DEFAULT_PID_THRESHOLD_MAIN,
+                DEFAULT_PID_DURATION_MAIN,
+            )
         approach_mm = float(data.get("approach_mm", DEFAULT_APPROACH_MM))
 
         end_kw = data.get("endstop_keywords",
@@ -1023,7 +1058,8 @@ def load_settings(path=SETTINGS_PATH):
             "tool_cx": tool_cx,
             "tool_cy": tool_cy,
             "tool_center_demo_radius_mm": tool_center_demo_radius_mm,
-            "alarm_sensitivity": alarm_sensitivity,
+            "alarm_threshold": alarm_threshold,
+            "alarm_duration": alarm_duration,
             "approach_mm": approach_mm,
             "endstop_keywords": end_kw,
             "endstop_timeout_ms": end_timeout_ms,
@@ -1067,7 +1103,8 @@ def load_settings(path=SETTINGS_PATH):
             "tool_cx": DEFAULT_TOOL_CX,
             "tool_cy": DEFAULT_TOOL_CY,
             "tool_center_demo_radius_mm": DEFAULT_TOOL_CENTER_RADIUS,
-            "alarm_sensitivity": DEFAULT_ALARM_SENSITIVITY,
+            "alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
+            "alarm_duration": DEFAULT_PID_DURATION_MAIN,
             "approach_mm": DEFAULT_APPROACH_MM,
             "endstop_keywords": ["ENDSTOP", "LIMIT", "LIM", "HIT", "END"],
             "endstop_timeout_ms": 0,
@@ -1127,7 +1164,8 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_rs_fps": DEFAULT_RS_FPS,
         "startup_uvc_try_index1": False,
         "startup_fullscreen": False,
-        "startup_alarm_sensitivity": DEFAULT_ALARM_SENSITIVITY,
+        "startup_alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
+        "startup_alarm_duration": DEFAULT_PID_DURATION_MAIN,
         "startup_show_launcher": True,
     }
 
@@ -1137,9 +1175,13 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         for key in defaults:
             if key in legacy:
                 defaults[key] = legacy[key]
-        if "alarm_sensitivity" in legacy:
-            defaults["startup_alarm_sensitivity"] = float(
-                legacy.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+        if "alarm_threshold" in legacy:
+            defaults["startup_alarm_threshold"] = float(
+                legacy.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN)
+            )
+        if "alarm_duration" in legacy:
+            defaults["startup_alarm_duration"] = float(
+                legacy.get("alarm_duration", DEFAULT_PID_DURATION_MAIN)
             )
     except Exception:
         pass
@@ -1152,6 +1194,16 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
                 for key in defaults:
                     if key in data:
                         defaults[key] = data[key]
+                if (
+                    "startup_alarm_sensitivity" in data
+                    and "startup_alarm_threshold" not in data
+                    and "startup_alarm_duration" not in data
+                ):
+                    _, threshold, duration = _alarm_pid_from_sensitivity(
+                        data.get("startup_alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+                    )
+                    defaults["startup_alarm_threshold"] = threshold
+                    defaults["startup_alarm_duration"] = duration
     except Exception as e:
         print(f"⚠️ Could not load startup settings from {path}: {e}")
     return defaults
@@ -1202,10 +1254,15 @@ def _resolve_startup_args(args, settings):
         args.uvc_try_index1 = bool(settings.get("startup_uvc_try_index1", False))
     if args.fullscreen is None:
         args.fullscreen = bool(settings.get("startup_fullscreen", False))
-    args.alarm_sensitivity = float(
-        args.alarm_sensitivity
-        if getattr(args, "alarm_sensitivity", None) is not None
-        else settings.get("startup_alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+    args.alarm_threshold = float(
+        args.alarm_threshold
+        if getattr(args, "alarm_threshold", None) is not None
+        else settings.get("startup_alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN)
+    )
+    args.alarm_duration = float(
+        args.alarm_duration
+        if getattr(args, "alarm_duration", None) is not None
+        else settings.get("startup_alarm_duration", DEFAULT_PID_DURATION_MAIN)
     )
     if args.launcher is None:
         args.launcher = bool(settings.get("startup_show_launcher", True))
@@ -1224,9 +1281,12 @@ def _persist_startup_args(settings, args):
     settings["startup_rs_fps"] = int(args.rs_fps or DEFAULT_RS_FPS)
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
-    settings["startup_alarm_sensitivity"] = float(
-        max(0.0, min(1.0, getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)))
+    threshold, duration = _clamp_alarm_pid(
+        getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
+        getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
     )
+    settings["startup_alarm_threshold"] = threshold
+    settings["startup_alarm_duration"] = duration
     settings["startup_show_launcher"] = bool(args.launcher)
     save_startup_settings(settings)
 
@@ -1269,7 +1329,12 @@ def show_startup_launcher(args):
     )
     try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
-    alarm_sensitivity_var = tk.DoubleVar(value=float(getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)))
+    alarm_threshold_var = tk.DoubleVar(
+        value=float(getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
+    )
+    alarm_duration_var = tk.DoubleVar(
+        value=float(getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN))
+    )
     launcher_var = tk.BooleanVar(value=bool(args.launcher))
     status_var = tk.StringVar(value="Detecting cameras...")
     alarm_status_var = tk.StringVar(value="")
@@ -1333,39 +1398,54 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Try sibling video-index1 if index0 has no frames", variable=try_index1_var).grid(
         row=7, column=0, columnspan=4, sticky="w", pady=(8, 0)
     )
-    ttk.Label(frame, text="Halt sensitivity").grid(row=8, column=0, sticky="w", pady=(8, 0))
-    alarm_scale = ttk.Scale(frame, from_=0.0, to=1.0, variable=alarm_sensitivity_var)
-    alarm_scale.grid(row=8, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
-    ttk.Label(
+    ttk.Label(frame, text="Halt threshold").grid(row=8, column=0, sticky="w", pady=(8, 0))
+    threshold_scale = ttk.Scale(
         frame,
-        textvariable=alarm_status_var,
-    ).grid(row=9, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0))
-    ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=10, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        from_=DEFAULT_PID_THRESHOLD_MIN,
+        to=DEFAULT_PID_THRESHOLD_MAX,
+        variable=alarm_threshold_var,
     )
-    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+    threshold_scale.grid(row=8, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
+    ttk.Label(frame, text="Halt duration").grid(row=9, column=0, sticky="w", pady=(4, 0))
+    duration_scale = ttk.Scale(
+        frame,
+        from_=DEFAULT_PID_DURATION_MIN,
+        to=DEFAULT_PID_DURATION_MAX,
+        variable=alarm_duration_var,
+    )
+    duration_scale.grid(row=9, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
+    ttk.Label(frame, textvariable=alarm_status_var).grid(
+        row=10, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
+    )
+    ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
         row=11, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
+    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+        row=12, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
 
-    ttk.Separator(frame).grid(row=12, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=13, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=13, column=0, columnspan=4, sticky="w"
+        row=14, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=14, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=15, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=15, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=16, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=16, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=17, column=0, columnspan=4, sticky="e", pady=(4, 0))
 
     def refresh_alarm_status(*_args):
-        sens = max(0.0, min(1.0, float(alarm_sensitivity_var.get())))
-        _, threshold, duration = _alarm_pid_from_sensitivity(sens)
+        threshold, duration = _clamp_alarm_pid(
+            alarm_threshold_var.get(),
+            alarm_duration_var.get(),
+        )
         alarm_status_var.set(
-            f"{sens:.2f}  ->  threshold {int(threshold)}, duration {int(duration)}"
+            f"default: threshold {int(DEFAULT_PID_THRESHOLD_MAIN)}, duration {int(DEFAULT_PID_DURATION_MAIN)}   "
+            f"selected: threshold {int(threshold)}, duration {int(duration)}"
         )
 
     def refresh_inventory():
@@ -1440,7 +1520,10 @@ def show_startup_launcher(args):
         args.rs_fps = rs_fps
         args.uvc_try_index1 = bool(try_index1_var.get())
         args.fullscreen = bool(fullscreen_var.get())
-        args.alarm_sensitivity = max(0.0, min(1.0, float(alarm_sensitivity_var.get())))
+        args.alarm_threshold, args.alarm_duration = _clamp_alarm_pid(
+            alarm_threshold_var.get(),
+            alarm_duration_var.get(),
+        )
         args.launcher = bool(launcher_var.get())
         result["ok"] = True
         root.destroy()
@@ -1451,7 +1534,8 @@ def show_startup_launcher(args):
 
     refresh_inventory()
     refresh_alarm_status()
-    alarm_scale.configure(command=lambda _v: refresh_alarm_status())
+    threshold_scale.configure(command=lambda _v: refresh_alarm_status())
+    duration_scale.configure(command=lambda _v: refresh_alarm_status())
     host_entry.focus_set()
     root.protocol("WM_DELETE_WINDOW", cancel)
     root.mainloop()
@@ -2418,7 +2502,8 @@ def parse_args():
     p.add_argument("--uvc-try-index1", dest="uvc_try_index1", action="store_true", help="Also try the sibling video-index1 node if index0 yields no frames")
     p.add_argument("--no-uvc-try-index1", dest="uvc_try_index1", action="store_false", help="Do not try sibling video-index1 nodes")
     p.set_defaults(uvc_try_index1=None)
-    p.add_argument("--alarm-sensitivity", type=float, default=None, help="Robot halt sensitivity (0..1, higher halts sooner)")
+    p.add_argument("--alarm-threshold", type=float, default=None, help="Robot halt threshold")
+    p.add_argument("--alarm-duration", type=float, default=None, help="Robot halt duration")
 
     p.add_argument("--fullscreen", dest="fullscreen", action="store_true", help="Start in fullscreen (toggle with F11)")
     p.add_argument("--windowed", dest="fullscreen", action="store_false", help="Force windowed startup")
@@ -2576,7 +2661,8 @@ class SharedState:
         self.tool_center_demo_radius_mm = float(
             self.settings.get("tool_center_demo_radius_mm", DEFAULT_TOOL_CENTER_RADIUS)
         )
-        self.alarm_sensitivity = float(self.settings.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY))
+        self.alarm_threshold = float(self.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
+        self.alarm_duration = float(self.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN))
         self.tool_center_demo_mode = "circle"
         self.approach_mm = float(self.settings.get("approach_mm", DEFAULT_APPROACH_MM))
         self.tool_center_demo = False
@@ -2751,20 +2837,26 @@ class RobotThread(threading.Thread):
         except Exception:
             pass
 
-    def _apply_alarm_sensitivity(self, val: float, persist: bool = True):
-        val, threshold, duration = _alarm_pid_from_sensitivity(val)
+    def _apply_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
+        threshold, duration = _clamp_alarm_pid(threshold, duration)
         for axis in range(6):
             self.robot.set_pid(index=axis, threshold=threshold, duration=duration)
         self.robot.set_alarm(1)
         with self.state.lock:
-            self.state.settings["alarm_sensitivity"] = val
-            self.state.alarm_sensitivity = val
+            self.state.settings["alarm_threshold"] = threshold
+            self.state.settings["alarm_duration"] = duration
+            self.state.alarm_threshold = threshold
+            self.state.alarm_duration = duration
         if persist:
             save_settings(self.state.settings)
         print(
-            f"[Halt] Sensitivity set to {val:.2f} "
+            f"[Halt] Settings applied "
             f"(threshold={int(threshold)}, duration={int(duration)})"
         )
+
+    def _apply_alarm_sensitivity(self, val: float, persist: bool = True):
+        _, threshold, duration = _alarm_pid_from_sensitivity(val)
+        self._apply_alarm_pid(threshold, duration, persist=persist)
 
     def _collision_print(self, zone_name: str, context: str):
         zone_name = str(zone_name or "unnamed")
@@ -4101,12 +4193,15 @@ class RobotThread(threading.Thread):
         print(f"[Robot] Kinematic model: {getattr(robot, 'model', 'unknown')} (n_dof={getattr(robot.kinematic, 'n_dof', '?')})")
         try:
             with self.state.lock:
-                startup_alarm_sensitivity = float(
-                    self.state.settings.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY)
+                startup_alarm_threshold = float(
+                    self.state.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN)
                 )
-            self._apply_alarm_sensitivity(startup_alarm_sensitivity, persist=False)
+                startup_alarm_duration = float(
+                    self.state.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN)
+                )
+            self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
         except Exception as e:
-            print(f"⚠️ Could not apply startup halt sensitivity: {e}")
+            print(f"⚠️ Could not apply startup halt settings: {e}")
         robot.set_motor(1)
         self._update_tcp_from_settings()
 
@@ -4541,6 +4636,19 @@ class RobotThread(threading.Thread):
                         self.tool_center_demo_resume.set()
                         with self.state.lock:
                             self.state.tool_center_demo_waiting = False
+                        continue
+
+                    elif typ == "set_alarm_pid":
+                        try:
+                            threshold = float(cmd.get("threshold"))
+                            duration = float(cmd.get("duration"))
+                        except Exception:
+                            threshold = DEFAULT_PID_THRESHOLD_MAIN
+                            duration = DEFAULT_PID_DURATION_MAIN
+                        try:
+                            self._apply_alarm_pid(threshold, duration, persist=True)
+                        except Exception as e:
+                            print(f"⚠️ set_alarm_pid failed: {e}")
                         continue
 
                     elif typ == "set_alarm_sensitivity":
@@ -6071,11 +6179,14 @@ def main():
     state = SharedState()
     with state.lock:
         state.poses["Reload"] = DEFAULT_POSES["Reload"].copy()
-        state.settings["alarm_sensitivity"] = max(
-            0.0,
-            min(1.0, float(getattr(args, "alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY))),
+        threshold, duration = _clamp_alarm_pid(
+            getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
+            getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
         )
-        state.alarm_sensitivity = float(state.settings["alarm_sensitivity"])
+        state.settings["alarm_threshold"] = threshold
+        state.settings["alarm_duration"] = duration
+        state.alarm_threshold = threshold
+        state.alarm_duration = duration
     save_poses(state.poses)
     save_settings(state.settings)
 
@@ -6114,7 +6225,8 @@ def main():
     pitch_input_active    = False
     pitch_text            = ""
     tool_center_radius_drag = False
-    alarm_sens_drag = False
+    alarm_threshold_drag = False
+    alarm_duration_drag = False
     settings_path_input_active = False
     settings_path_mode = "load"
     naming_input_active   = False
@@ -6162,10 +6274,12 @@ def main():
     toolcx_text           = f"{getattr(state, 'tool_cx', DEFAULT_TOOL_CX):.3f}"
     toolcy_text           = f"{getattr(state, 'tool_cy', DEFAULT_TOOL_CY):.3f}"
     tool_center_radius    = float(state.settings.get("tool_center_demo_radius_mm", DEFAULT_TOOL_CENTER_RADIUS))
-    alarm_sensitivity_val = float(state.settings.get("alarm_sensitivity", DEFAULT_ALARM_SENSITIVITY))
+    alarm_threshold_val = float(state.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
+    alarm_duration_val = float(state.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN))
     settings_path_text    = SETTINGS_PATH
     tool_center_radius_rect = None
-    alarm_sens_rect = None
+    alarm_threshold_rect = None
+    alarm_duration_rect = None
     # Needle tip traces (normalized coords in respective UVC frames)
     needle_trace_h = []
     needle_trace_v = []
@@ -6331,7 +6445,7 @@ def main():
             return (2, n.lower())
         return sorted(names, key=key)
 
-    def make_buttons(current_tool_lz, current_approach, poses, settings, routines, current_routine_name, tool_center_demo_on, tool_center_demo_mode, tool_center_radius, alarm_sensitivity):
+    def make_buttons(current_tool_lz, current_approach, poses, settings, routines, current_routine_name, tool_center_demo_on, tool_center_demo_mode, tool_center_radius, alarm_threshold, alarm_duration):
         syringe_volume_ul = settings.get("syringe_volume_ul", 10.0)
         syringe_step_ul = settings.get("syringe_step_ul", 1.0)
         syringe_remaining_ul = settings.get("syringe_remaining_ul", syringe_volume_ul)
@@ -6341,7 +6455,8 @@ def main():
             else 0
         )
         reserved_names = set(normalize_reserved_list(settings.get("reserved_poses", [])))
-        alarm_sens = float(alarm_sensitivity)
+        alarm_threshold = float(alarm_threshold)
+        alarm_duration = float(alarm_duration)
 
         items = [
             {"label": "— Tool Head —", "kind": "header"},
@@ -6424,7 +6539,8 @@ def main():
             {"label": "— Settings —", "kind": "header"},
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
-            {"label": f"Halt sensitivity: {state.settings.get('alarm_sensitivity', DEFAULT_ALARM_SENSITIVITY):.2f}", "kind": "alarm_sensitivity"},
+            {"label": f"Halt threshold: {int(round(alarm_threshold))}", "kind": "alarm_threshold"},
+            {"label": f"Halt duration: {int(round(alarm_duration))}", "kind": "alarm_duration"},
             {"label": "Quit", "kind": "quit_app"},
         ]
 
@@ -6821,7 +6937,8 @@ def main():
     while running:
         click_pos = None
         tool_center_radius_rect = None
-        alarm_sens_rect = None
+        alarm_threshold_rect = None
+        alarm_duration_rect = None
         tool_center_demo_mode = getattr(state, "tool_center_demo_mode", "circle")
 
         # ───────────── Event pump ─────────────
@@ -6871,21 +6988,36 @@ def main():
                         state.settings["tool_center_demo_radius_mm"] = tool_center_radius
                     save_settings(state.settings)
                     continue
-                if alarm_sens_rect and alarm_sens_rect.collidepoint(ev.pos):
-                    alarm_sens_drag = True
+                if alarm_threshold_rect and alarm_threshold_rect.collidepoint(ev.pos):
+                    alarm_threshold_drag = True
                     mx = ev.pos[0]
-                    rel = max(0.0, min(1.0, (mx - alarm_sens_rect.x) / max(1, alarm_sens_rect.w)))
-                    alarm_sensitivity_val = rel
+                    rel = max(0.0, min(1.0, (mx - alarm_threshold_rect.x) / max(1, alarm_threshold_rect.w)))
+                    alarm_threshold_val = DEFAULT_PID_THRESHOLD_MIN + rel * (DEFAULT_PID_THRESHOLD_MAX - DEFAULT_PID_THRESHOLD_MIN)
+                    alarm_threshold_val, alarm_duration_val = _clamp_alarm_pid(alarm_threshold_val, alarm_duration_val)
                     with state.lock:
-                        state.settings["alarm_sensitivity"] = alarm_sensitivity_val
+                        state.settings["alarm_threshold"] = alarm_threshold_val
+                        state.settings["alarm_duration"] = alarm_duration_val
                     save_settings(state.settings)
-                    rt.enqueue({"type": "set_alarm_sensitivity", "sens": alarm_sensitivity_val})
+                    rt.enqueue({"type": "set_alarm_pid", "threshold": alarm_threshold_val, "duration": alarm_duration_val})
+                    continue
+                if alarm_duration_rect and alarm_duration_rect.collidepoint(ev.pos):
+                    alarm_duration_drag = True
+                    mx = ev.pos[0]
+                    rel = max(0.0, min(1.0, (mx - alarm_duration_rect.x) / max(1, alarm_duration_rect.w)))
+                    alarm_duration_val = DEFAULT_PID_DURATION_MIN + rel * (DEFAULT_PID_DURATION_MAX - DEFAULT_PID_DURATION_MIN)
+                    alarm_threshold_val, alarm_duration_val = _clamp_alarm_pid(alarm_threshold_val, alarm_duration_val)
+                    with state.lock:
+                        state.settings["alarm_threshold"] = alarm_threshold_val
+                        state.settings["alarm_duration"] = alarm_duration_val
+                    save_settings(state.settings)
+                    rt.enqueue({"type": "set_alarm_pid", "threshold": alarm_threshold_val, "duration": alarm_duration_val})
                     continue
                 click_pos = ev.pos
 
             if ev.type == pygame.MOUSEBUTTONUP and ev.button == 1:
                 tool_center_radius_drag = False
-                alarm_sens_drag = False
+                alarm_threshold_drag = False
+                alarm_duration_drag = False
 
             if ev.type == pygame.MOUSEMOTION:
                 if tool_center_radius_drag and tool_center_radius_rect:
@@ -6895,13 +7027,26 @@ def main():
                     with state.lock:
                         state.settings["tool_center_demo_radius_mm"] = tool_center_radius
                     save_settings(state.settings)
-                if alarm_sens_drag and alarm_sens_rect:
+                if alarm_threshold_drag and alarm_threshold_rect:
                     mx = ev.pos[0]
-                    rel = max(0.0, min(1.0, (mx - alarm_sens_rect.x) / max(1, alarm_sens_rect.w)))
-                    alarm_sensitivity_val = rel
+                    rel = max(0.0, min(1.0, (mx - alarm_threshold_rect.x) / max(1, alarm_threshold_rect.w)))
+                    alarm_threshold_val = DEFAULT_PID_THRESHOLD_MIN + rel * (DEFAULT_PID_THRESHOLD_MAX - DEFAULT_PID_THRESHOLD_MIN)
+                    alarm_threshold_val, alarm_duration_val = _clamp_alarm_pid(alarm_threshold_val, alarm_duration_val)
                     with state.lock:
-                        state.settings["alarm_sensitivity"] = alarm_sensitivity_val
+                        state.settings["alarm_threshold"] = alarm_threshold_val
+                        state.settings["alarm_duration"] = alarm_duration_val
                     save_settings(state.settings)
+                    rt.enqueue({"type": "set_alarm_pid", "threshold": alarm_threshold_val, "duration": alarm_duration_val})
+                if alarm_duration_drag and alarm_duration_rect:
+                    mx = ev.pos[0]
+                    rel = max(0.0, min(1.0, (mx - alarm_duration_rect.x) / max(1, alarm_duration_rect.w)))
+                    alarm_duration_val = DEFAULT_PID_DURATION_MIN + rel * (DEFAULT_PID_DURATION_MAX - DEFAULT_PID_DURATION_MIN)
+                    alarm_threshold_val, alarm_duration_val = _clamp_alarm_pid(alarm_threshold_val, alarm_duration_val)
+                    with state.lock:
+                        state.settings["alarm_threshold"] = alarm_threshold_val
+                        state.settings["alarm_duration"] = alarm_duration_val
+                    save_settings(state.settings)
+                    rt.enqueue({"type": "set_alarm_pid", "threshold": alarm_threshold_val, "duration": alarm_duration_val})
 
             # Text-input KEYDOWN handling
             if ev.type == pygame.KEYDOWN:
@@ -8161,7 +8306,8 @@ def main():
             getattr(state, "tool_center_demo", False),
             getattr(state, "tool_center_demo_mode", "circle"),
             tool_center_radius,
-            alarm_sensitivity_val,
+            alarm_threshold_val,
+            alarm_duration_val,
         )
 
         prev_clip = screen.get_clip()
@@ -8271,7 +8417,7 @@ def main():
                 total_h += track_rect.h + btn_gap
                 continue
 
-            if kind == "alarm_sensitivity":
+            if kind in ("alarm_threshold", "alarm_duration"):
                 track_w = btn_w
                 track_h = 10
                 track_rect = pygame.Rect(tr_rect.x + m_ui, y_off_btn, track_w, 40)
@@ -8279,14 +8425,27 @@ def main():
                 pygame.draw.rect(screen, (0, 200, 200), track_rect, 2)
                 bar_rect = pygame.Rect(track_rect.x + 10, track_rect.centery - track_h//2, track_w - 20, track_h)
                 pygame.draw.rect(screen, (70, 70, 90), bar_rect)
-                sens_val = max(0.0, min(1.0, alarm_sensitivity_val))
-                knob_x = bar_rect.x + int(sens_val * bar_rect.w)
+                if kind == "alarm_threshold":
+                    min_val = DEFAULT_PID_THRESHOLD_MIN
+                    max_val = DEFAULT_PID_THRESHOLD_MAX
+                    cur_val = max(min_val, min(max_val, alarm_threshold_val))
+                    alarm_label = f"{int(round(cur_val))}"
+                else:
+                    min_val = DEFAULT_PID_DURATION_MIN
+                    max_val = DEFAULT_PID_DURATION_MAX
+                    cur_val = max(min_val, min(max_val, alarm_duration_val))
+                    alarm_label = f"{int(round(cur_val))}"
+                rel_val = (cur_val - min_val) / max(1e-6, (max_val - min_val))
+                knob_x = bar_rect.x + int(rel_val * bar_rect.w)
                 knob = pygame.Rect(knob_x - 6, bar_rect.centery - 8, 12, 16)
                 pygame.draw.rect(screen, (0, 255, 127), knob)
-                val_txt = placeholder_font.render(f"{sens_val:.2f}", True, (220, 230, 240))
+                val_txt = placeholder_font.render(alarm_label, True, (220, 230, 240))
                 screen.blit(val_txt, (track_rect.x + (track_w - val_txt.get_width()) // 2, track_rect.y + track_rect.h - val_txt.get_height() - 4))
-                ui_clickables.append((bar_rect, {"kind": "alarm_sensitivity", "rect": bar_rect}))
-                alarm_sens_rect = bar_rect
+                ui_clickables.append((bar_rect, {"kind": kind, "rect": bar_rect}))
+                if kind == "alarm_threshold":
+                    alarm_threshold_rect = bar_rect
+                else:
+                    alarm_duration_rect = bar_rect
                 y_off_btn += track_rect.h + btn_gap
                 total_h += track_rect.h + btn_gap
                 continue
@@ -9220,14 +9379,23 @@ def main():
                                         with state.lock:
                                             state.settings["tool_center_demo_radius_mm"] = new_radius
                                         save_settings(state.settings)
-                                elif kind == "alarm_sensitivity":
+                                elif kind in ("alarm_threshold", "alarm_duration"):
                                     bar = act.get("rect")
                                     if bar and bar.w > 0:
                                         rel = max(0.0, min(1.0, (mx - bar.x) / bar.w))
-                                        alarm_sensitivity_val = rel
+                                        if kind == "alarm_threshold":
+                                            alarm_threshold_val = DEFAULT_PID_THRESHOLD_MIN + rel * (DEFAULT_PID_THRESHOLD_MAX - DEFAULT_PID_THRESHOLD_MIN)
+                                        else:
+                                            alarm_duration_val = DEFAULT_PID_DURATION_MIN + rel * (DEFAULT_PID_DURATION_MAX - DEFAULT_PID_DURATION_MIN)
+                                        alarm_threshold_val, alarm_duration_val = _clamp_alarm_pid(
+                                            alarm_threshold_val,
+                                            alarm_duration_val,
+                                        )
                                         with state.lock:
-                                            state.settings["alarm_sensitivity"] = alarm_sensitivity_val
+                                            state.settings["alarm_threshold"] = alarm_threshold_val
+                                            state.settings["alarm_duration"] = alarm_duration_val
                                         save_settings(state.settings)
+                                        rt.enqueue({"type": "set_alarm_pid", "threshold": alarm_threshold_val, "duration": alarm_duration_val})
                                 elif kind == "edit_approach":
                                     approach_input_active = True
                                     approach_text = f"{state.approach_mm:.1f}"
