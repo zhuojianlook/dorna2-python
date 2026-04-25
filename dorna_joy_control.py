@@ -4199,9 +4199,20 @@ class RobotThread(threading.Thread):
                 startup_alarm_duration = float(
                     self.state.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN)
                 )
-            self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
         except Exception as e:
-            print(f"⚠️ Could not apply startup halt settings: {e}")
+            startup_alarm_threshold = DEFAULT_PID_THRESHOLD_MAIN
+            startup_alarm_duration = DEFAULT_PID_DURATION_MAIN
+            print(f"⚠️ Could not read startup halt settings: {e}")
+        try:
+            for axis in range(6):
+                robot.set_pid(
+                    index=axis,
+                    threshold=DEFAULT_PID_THRESHOLD_MAIN,
+                    duration=DEFAULT_PID_DURATION_MAIN,
+                )
+            robot.set_alarm(1)
+        except Exception as e:
+            print(f"⚠️ Could not apply stock halt settings for startup move: {e}")
         robot.set_motor(1)
         self._update_tcp_from_settings()
 
@@ -4225,6 +4236,10 @@ class RobotThread(threading.Thread):
                 self._refresh_from_robot()
             except Exception:
                 pass
+        try:
+            self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
+        except Exception as e:
+            print(f"⚠️ Could not apply selected halt settings after startup move: {e}")
 
         with self.state.lock:
             if "Default" in self.state.poses:
