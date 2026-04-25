@@ -61,6 +61,14 @@ RS_QUALITY_PRESETS = [
     (_profile_label(424, 240, 30), (424, 240, 30)),
 ]
 
+HALT_PID_PRESETS = [
+    ("Stock (200 / 10000)", (200, 10000)),
+    ("Mild (180 / 7000)", (180, 7000)),
+    ("Moderate (160 / 5000)", (160, 5000)),
+    ("Sensitive (140 / 3000)", (140, 3000)),
+    ("Aggressive (120 / 2000)", (120, 2000)),
+]
+
 def _profile_value_map(presets):
     return {label: values for label, values in presets}
 
@@ -83,6 +91,23 @@ def _profile_values_from_label(label: str, presets, fallback):
 
 def _profile_choice_values(presets, current_label: str) -> list:
     values = [label for label, _ in presets]
+    current_label = str(current_label or "").strip()
+    if current_label and current_label not in values:
+        values.append(current_label)
+    return values
+
+def _halt_preset_value_map():
+    return {label: values for label, values in HALT_PID_PRESETS}
+
+def _halt_preset_label_for_values(threshold: float, duration: float) -> str:
+    current = _clamp_alarm_pid(threshold, duration)
+    for label, values in HALT_PID_PRESETS:
+        if tuple(values) == tuple(current):
+            return label
+    return f"Custom ({int(current[0])} / {int(current[1])})"
+
+def _halt_preset_choice_values(current_label: str) -> list:
+    values = [label for label, _ in HALT_PID_PRESETS]
     current_label = str(current_label or "").strip()
     if current_label and current_label not in values:
         values.append(current_label)
@@ -1335,6 +1360,12 @@ def show_startup_launcher(args):
     alarm_duration_var = tk.DoubleVar(
         value=float(getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN))
     )
+    halt_preset_var = tk.StringVar(
+        value=_halt_preset_label_for_values(
+            getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
+            getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
+        )
+    )
     launcher_var = tk.BooleanVar(value=bool(args.launcher))
     status_var = tk.StringVar(value="Detecting cameras...")
     alarm_status_var = tk.StringVar(value="")
@@ -1414,39 +1445,59 @@ def show_startup_launcher(args):
         variable=alarm_duration_var,
     )
     duration_scale.grid(row=9, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
+    ttk.Label(frame, text="Halt preset").grid(row=10, column=0, sticky="w", pady=(4, 0))
+    halt_preset_combo = ttk.Combobox(
+        frame,
+        textvariable=halt_preset_var,
+        values=_halt_preset_choice_values(halt_preset_var.get()),
+        width=28,
+        state="readonly",
+    )
+    halt_preset_combo.grid(row=10, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(4, 0))
     ttk.Label(frame, textvariable=alarm_status_var).grid(
-        row=10, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
+        row=11, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
     )
     ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=11, column=0, columnspan=4, sticky="w", pady=(4, 0)
-    )
-    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
         row=12, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
+    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+        row=13, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
 
-    ttk.Separator(frame).grid(row=13, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=14, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=14, column=0, columnspan=4, sticky="w"
+        row=15, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=15, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=16, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=16, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=17, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=17, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=18, column=0, columnspan=4, sticky="e", pady=(4, 0))
 
     def refresh_alarm_status(*_args):
         threshold, duration = _clamp_alarm_pid(
             alarm_threshold_var.get(),
             alarm_duration_var.get(),
         )
+        preset_label = _halt_preset_label_for_values(threshold, duration)
+        halt_preset_combo["values"] = _halt_preset_choice_values(preset_label)
+        halt_preset_var.set(preset_label)
         alarm_status_var.set(
             f"default: threshold {int(DEFAULT_PID_THRESHOLD_MAIN)}, duration {int(DEFAULT_PID_DURATION_MAIN)}   "
             f"selected: threshold {int(threshold)}, duration {int(duration)}"
         )
+
+    def apply_halt_preset(*_args):
+        values = _halt_preset_value_map().get(str(halt_preset_var.get()).strip())
+        if not values:
+            return
+        alarm_threshold_var.set(float(values[0]))
+        alarm_duration_var.set(float(values[1]))
+        refresh_alarm_status()
 
     def refresh_inventory():
         nonlocal option_paths
@@ -1536,6 +1587,7 @@ def show_startup_launcher(args):
     refresh_alarm_status()
     threshold_scale.configure(command=lambda _v: refresh_alarm_status())
     duration_scale.configure(command=lambda _v: refresh_alarm_status())
+    halt_preset_combo.bind("<<ComboboxSelected>>", apply_halt_preset)
     host_entry.focus_set()
     root.protocol("WM_DELETE_WINDOW", cancel)
     root.mainloop()
