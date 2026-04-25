@@ -4210,9 +4210,9 @@ class RobotThread(threading.Thread):
                     threshold=DEFAULT_PID_THRESHOLD_MAIN,
                     duration=DEFAULT_PID_DURATION_MAIN,
                 )
-            robot.set_alarm(1)
+            robot.set_alarm(0)
         except Exception as e:
-            print(f"⚠️ Could not apply stock halt settings for startup move: {e}")
+            print(f"⚠️ Could not prepare disarmed stock halt settings for startup move: {e}")
         robot.set_motor(1)
         self._update_tcp_from_settings()
 
