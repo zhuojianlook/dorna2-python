@@ -62,6 +62,7 @@ RS_QUALITY_PRESETS = [
 ]
 
 HALT_PID_PRESETS = [
+    ("Default start (40 / 100)", (40, 100)),
     ("Stock (200 / 10000)", (200, 10000)),
     ("Mild (180 / 7000)", (180, 7000)),
     ("Moderate (160 / 5000)", (160, 5000)),
@@ -766,6 +767,8 @@ DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
 DEFAULT_PID_THRESHOLD_MAIN = 200.0
 DEFAULT_PID_DURATION_MAIN = 10000.0
+DEFAULT_STARTUP_ALARM_THRESHOLD = 40.0
+DEFAULT_STARTUP_ALARM_DURATION = 100.0
 DEFAULT_PID_THRESHOLD_MIN = 1.0
 DEFAULT_PID_THRESHOLD_MAX = 400.0
 DEFAULT_PID_DURATION_MIN = 1.0
@@ -1198,8 +1201,8 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_clear_alarm": True,
         "startup_apply_halt_settings": True,
         "startup_auto_tune_halt": False,
-        "startup_alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
-        "startup_alarm_duration": DEFAULT_PID_DURATION_MAIN,
+        "startup_alarm_threshold": DEFAULT_STARTUP_ALARM_THRESHOLD,
+        "startup_alarm_duration": DEFAULT_STARTUP_ALARM_DURATION,
         "startup_show_launcher": True,
     }
 
@@ -1307,12 +1310,12 @@ def _resolve_startup_args(args, settings):
     args.alarm_threshold = float(
         args.alarm_threshold
         if getattr(args, "alarm_threshold", None) is not None
-        else settings.get("startup_alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN)
+        else settings.get("startup_alarm_threshold", DEFAULT_STARTUP_ALARM_THRESHOLD)
     )
     args.alarm_duration = float(
         args.alarm_duration
         if getattr(args, "alarm_duration", None) is not None
-        else settings.get("startup_alarm_duration", DEFAULT_PID_DURATION_MAIN)
+        else settings.get("startup_alarm_duration", DEFAULT_STARTUP_ALARM_DURATION)
     )
     if args.launcher is None:
         args.launcher = bool(settings.get("startup_show_launcher", True))
