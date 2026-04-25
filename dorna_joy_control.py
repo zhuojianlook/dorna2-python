@@ -770,6 +770,9 @@ DEFAULT_PID_THRESHOLD_MIN = 1.0
 DEFAULT_PID_THRESHOLD_MAX = 400.0
 DEFAULT_PID_DURATION_MIN = 1.0
 DEFAULT_PID_DURATION_MAX = 20000.0
+HALT_TUNE_MOVE_MM = 50.0
+HALT_TUNE_MOVE_VEL = 10.0
+HALT_TUNE_HOLD_S = 0.75
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
 DEFAULT_SELF_COLLISION = {
@@ -1493,6 +1496,21 @@ def _launcher_apply_alarm_pid(robot, alarm_latch, threshold: float, duration: fl
     return threshold, duration
 
 
+def _launcher_prepare_relaxed_alarm_pid(robot, alarm_latch):
+    alarm_latch.clear_local()
+    try:
+        robot.set_alarm(0)
+        time.sleep(0.05)
+    except Exception:
+        pass
+    for axis in range(6):
+        robot.set_pid(
+            index=axis,
+            threshold=DEFAULT_PID_THRESHOLD_MAX,
+            duration=DEFAULT_PID_DURATION_MAX,
+        )
+
+
 def _launcher_hold_without_alarm(alarm_latch, hold_s: float = 0.75, poll_s: float = 0.05):
     end_t = time.time() + max(0.0, float(hold_s))
     while time.time() < end_t:
@@ -1558,10 +1576,31 @@ def _launcher_test_alarm_pid_candidate(
     threshold: float,
     duration: float,
     progress_cb=None,
-    hold_s: float = 0.75,
+    hold_s: float = HALT_TUNE_HOLD_S,
 ):
     threshold, duration = _clamp_alarm_pid(threshold, duration)
     _launcher_tune_log(progress_cb, f"[HaltTune] Testing threshold={int(threshold)}, duration={int(duration)}")
+    _launcher_prepare_relaxed_alarm_pid(robot, alarm_latch)
+    _launcher_clear_alarm_latch(robot, alarm_latch, "before candidate setup", progress_cb=progress_cb)
+    try:
+        robot.set_motor(1)
+    except Exception:
+        pass
+    poses = load_poses()
+    default_pose = poses.get("Default", DEFAULT_POSES["Default"]).copy()
+    go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+    go.update(default_pose)
+    _launcher_tune_log(progress_cb, "[HaltTune] Returning to Default pose before candidate test.")
+    robot.play_dict(go)
+    if not _launcher_wait_for_joint_settle(
+        robot,
+        progress_cb=progress_cb,
+        max_wait_s=4.0,
+        stable_for_s=1.0,
+        tol_deg=0.05,
+    ):
+        _launcher_clear_alarm_latch(robot, alarm_latch, "after failed candidate setup", progress_cb=progress_cb)
+        return False
     _launcher_apply_alarm_pid(robot, alarm_latch, threshold, duration, progress_cb=progress_cb)
     settled = _launcher_wait_for_joint_settle(
         robot,
@@ -1571,6 +1610,40 @@ def _launcher_test_alarm_pid_candidate(
         tol_deg=0.05,
     )
     stable = bool(settled) and _launcher_hold_without_alarm(alarm_latch, hold_s=hold_s, poll_s=0.05)
+    if stable:
+        for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
+            try:
+                pose = robot.get_all_pose()[:6]
+                x, y, z, a, b, c = [float(v) for v in pose]
+                R = axis_angle_to_R(a, b, c)
+                tz = R[:, 2]
+                dx, dy, dz = tz[0] * dist_mm, tz[1] * dist_mm, tz[2] * dist_mm
+                _launcher_tune_log(
+                    progress_cb,
+                    f"[HaltTune] Movement test: tool-axis {label} {abs(int(dist_mm))} mm.",
+                )
+                robot.play_dict({
+                    "cmd": "lmove",
+                    "rel": 1,
+                    "x": float(dx),
+                    "y": float(dy),
+                    "z": float(dz),
+                    "vel": HALT_TUNE_MOVE_VEL,
+                    "cont": 0,
+                })
+                settled = _launcher_wait_for_joint_settle(
+                    robot,
+                    progress_cb=progress_cb,
+                    max_wait_s=max(4.0, abs(dist_mm) / max(1e-6, HALT_TUNE_MOVE_VEL) + 2.0),
+                    stable_for_s=0.35,
+                    tol_deg=0.05,
+                )
+                stable = bool(settled) and _launcher_hold_without_alarm(alarm_latch, hold_s=0.35, poll_s=0.05)
+            except Exception as e:
+                _launcher_tune_log(progress_cb, f"⚠️ [HaltTune] Movement test failed during {label} move: {e}")
+                stable = False
+            if not stable:
+                break
     if not stable:
         alarm_msg = alarm_latch.last_message()
         if alarm_msg:
@@ -1625,12 +1698,7 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
         except Exception as e:
             _launcher_tune_log(progress_cb, f"⚠️ Could not register robot alarm event hook: {e}")
 
-        for axis in range(6):
-            robot.set_pid(
-                index=axis,
-                threshold=DEFAULT_PID_THRESHOLD_MAIN,
-                duration=DEFAULT_PID_DURATION_MAIN,
-            )
+        _launcher_prepare_relaxed_alarm_pid(robot, alarm_latch)
         _launcher_clear_alarm_latch(robot, alarm_latch, "before motor enable", progress_cb=progress_cb)
         robot.set_motor(1)
 
@@ -1744,7 +1812,7 @@ def show_startup_launcher(args):
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
     clear_alarm_var = tk.BooleanVar(value=bool(getattr(args, "clear_alarm_startup", True)))
     apply_halt_settings_var = tk.BooleanVar(value=bool(getattr(args, "apply_halt_settings_startup", True)))
-    auto_tune_halt_var = tk.BooleanVar(value=bool(getattr(args, "auto_tune_halt_startup", False)))
+    auto_tune_halt_var = tk.BooleanVar(value=False)
     alarm_threshold_var = tk.DoubleVar(
         value=float(getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
     )
@@ -3542,6 +3610,22 @@ class RobotThread(threading.Thread):
             f"(threshold={int(threshold)}, duration={int(duration)})"
         )
 
+    def _prepare_relaxed_alarm_pid(self):
+        with self.alarm_state_lock:
+            self.alarm_latched = False
+            self.last_alarm_msg = None
+        try:
+            self.robot.set_alarm(0)
+            time.sleep(0.05)
+        except Exception:
+            pass
+        for axis in range(6):
+            self.robot.set_pid(
+                index=axis,
+                threshold=DEFAULT_PID_THRESHOLD_MAX,
+                duration=DEFAULT_PID_DURATION_MAX,
+            )
+
     def _clear_alarm_latch(self, context: str = "startup"):
         try:
             stat = self.robot.set_alarm(0)
@@ -3602,12 +3686,49 @@ class RobotThread(threading.Thread):
             time.sleep(max(0.01, float(poll_s)))
         return not self._is_alarm_latched()
 
-    def _test_alarm_pid_candidate(self, threshold: float, duration: float, hold_s: float = 0.75):
+    def _test_alarm_pid_candidate(self, threshold: float, duration: float, hold_s: float = HALT_TUNE_HOLD_S):
         threshold, duration = _clamp_alarm_pid(threshold, duration)
         print(f"[HaltTune] Testing threshold={int(threshold)}, duration={int(duration)}")
+        try:
+            self._prepare_relaxed_alarm_pid()
+            self._clear_alarm_latch("before candidate setup")
+            self.robot.set_motor(1)
+            with self.state.lock:
+                default_pose = self.state.poses.get("Default", {}).copy()
+            if default_pose:
+                print("[HaltTune] Returning to Default pose before candidate test.")
+                if not self._queue_jmove_to_pose(default_pose):
+                    self._clear_alarm_latch("after failed candidate setup")
+                    return False
+                self._set_current_named("Default")
+            if not self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05):
+                self._clear_alarm_latch("after failed candidate setup")
+                return False
+        except Exception as e:
+            print(f"⚠️ [HaltTune] Could not prepare candidate test: {e}")
+            self._clear_alarm_latch("after failed candidate setup")
+            return False
         self._apply_alarm_pid(threshold, duration, persist=False)
         settled = self._wait_for_joint_settle(max_wait_s=2.0, stable_for_s=0.35, tol_deg=0.05)
         stable = bool(settled) and self._hold_without_alarm(hold_s=hold_s, poll_s=0.05)
+        if stable:
+            for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
+                try:
+                    print(f"[HaltTune] Movement test: tool-axis {label} {abs(int(dist_mm))} mm.")
+                    if not self._tool_move_along_tz(dist_mm, cont=0):
+                        stable = False
+                        break
+                    settled = self._wait_for_joint_settle(
+                        max_wait_s=max(4.0, abs(dist_mm) / max(1e-6, self.VT) + 2.0),
+                        stable_for_s=0.35,
+                        tol_deg=0.05,
+                    )
+                    stable = bool(settled) and self._hold_without_alarm(hold_s=0.35, poll_s=0.05)
+                except Exception as e:
+                    print(f"⚠️ [HaltTune] Movement test failed during {label} move: {e}")
+                    stable = False
+                if not stable:
+                    break
         if not stable:
             with self.alarm_state_lock:
                 alarm_msg = dict(self.last_alarm_msg) if isinstance(self.last_alarm_msg, dict) else None
@@ -3631,6 +3752,9 @@ class RobotThread(threading.Thread):
             with self.state.lock:
                 default_pose = self.state.poses.get("Default", {}).copy()
             if default_pose:
+                self._prepare_relaxed_alarm_pid()
+                self._clear_alarm_latch("before auto-tune setup")
+                self.robot.set_motor(1)
                 if self.current_named != "Default":
                     if self._queue_jmove_to_pose(default_pose):
                         self._set_current_named("Default")
