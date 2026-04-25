@@ -1190,6 +1190,7 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_uvc_try_index1": False,
         "startup_fullscreen": False,
         "startup_clear_alarm": True,
+        "startup_auto_arm_halt": False,
         "startup_alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
         "startup_alarm_duration": DEFAULT_PID_DURATION_MAIN,
         "startup_show_launcher": True,
@@ -1282,6 +1283,8 @@ def _resolve_startup_args(args, settings):
         args.fullscreen = bool(settings.get("startup_fullscreen", False))
     if getattr(args, "clear_alarm_startup", None) is None:
         args.clear_alarm_startup = bool(settings.get("startup_clear_alarm", True))
+    if getattr(args, "auto_arm_halt_startup", None) is None:
+        args.auto_arm_halt_startup = bool(settings.get("startup_auto_arm_halt", False))
     args.alarm_threshold = float(
         args.alarm_threshold
         if getattr(args, "alarm_threshold", None) is not None
@@ -1310,6 +1313,7 @@ def _persist_startup_args(settings, args):
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
     settings["startup_clear_alarm"] = bool(getattr(args, "clear_alarm_startup", True))
+    settings["startup_auto_arm_halt"] = bool(getattr(args, "auto_arm_halt_startup", False))
     threshold, duration = _clamp_alarm_pid(
         getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
         getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
@@ -1359,6 +1363,7 @@ def show_startup_launcher(args):
     try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
     clear_alarm_var = tk.BooleanVar(value=bool(getattr(args, "clear_alarm_startup", True)))
+    auto_arm_halt_var = tk.BooleanVar(value=bool(getattr(args, "auto_arm_halt_startup", False)))
     alarm_threshold_var = tk.DoubleVar(
         value=float(getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
     )
@@ -1437,23 +1442,26 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Clear latched alarms on startup", variable=clear_alarm_var).grid(
         row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
-    ttk.Label(frame, text="Halt threshold").grid(row=9, column=0, sticky="w", pady=(8, 0))
+    ttk.Checkbutton(frame, text="Auto-arm halt protection after startup", variable=auto_arm_halt_var).grid(
+        row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
+    ttk.Label(frame, text="Halt threshold").grid(row=10, column=0, sticky="w", pady=(8, 0))
     threshold_scale = ttk.Scale(
         frame,
         from_=DEFAULT_PID_THRESHOLD_MIN,
         to=DEFAULT_PID_THRESHOLD_MAX,
         variable=alarm_threshold_var,
     )
-    threshold_scale.grid(row=9, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
-    ttk.Label(frame, text="Halt duration").grid(row=10, column=0, sticky="w", pady=(4, 0))
+    threshold_scale.grid(row=10, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(8, 0))
+    ttk.Label(frame, text="Halt duration").grid(row=11, column=0, sticky="w", pady=(4, 0))
     duration_scale = ttk.Scale(
         frame,
         from_=DEFAULT_PID_DURATION_MIN,
         to=DEFAULT_PID_DURATION_MAX,
         variable=alarm_duration_var,
     )
-    duration_scale.grid(row=10, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
-    ttk.Label(frame, text="Halt preset").grid(row=11, column=0, sticky="w", pady=(4, 0))
+    duration_scale.grid(row=11, column=1, columnspan=3, sticky="we", padx=(8, 0), pady=(4, 0))
+    ttk.Label(frame, text="Halt preset").grid(row=12, column=0, sticky="w", pady=(4, 0))
     halt_preset_combo = ttk.Combobox(
         frame,
         textvariable=halt_preset_var,
@@ -1461,30 +1469,30 @@ def show_startup_launcher(args):
         width=28,
         state="readonly",
     )
-    halt_preset_combo.grid(row=11, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(4, 0))
+    halt_preset_combo.grid(row=12, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(4, 0))
     ttk.Label(frame, textvariable=alarm_status_var).grid(
-        row=12, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
+        row=13, column=1, columnspan=3, sticky="w", padx=(8, 0), pady=(2, 0)
     )
     ttk.Checkbutton(frame, text="Start fullscreen", variable=fullscreen_var).grid(
-        row=13, column=0, columnspan=4, sticky="w", pady=(4, 0)
-    )
-    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
         row=14, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
+    ttk.Checkbutton(frame, text="Show this launcher on startup", variable=launcher_var).grid(
+        row=15, column=0, columnspan=4, sticky="w", pady=(4, 0)
+    )
 
-    ttk.Separator(frame).grid(row=15, column=0, columnspan=4, sticky="we", pady=10)
+    ttk.Separator(frame).grid(row=16, column=0, columnspan=4, sticky="we", pady=10)
     ttk.Label(frame, text="Detected UVC inventory", font=("TkDefaultFont", 10, "bold")).grid(
-        row=16, column=0, columnspan=4, sticky="w"
+        row=17, column=0, columnspan=4, sticky="w"
     )
     inventory_text = tk.Text(frame, width=92, height=8, wrap="word")
-    inventory_text.grid(row=17, column=0, columnspan=4, sticky="we", pady=(6, 4))
+    inventory_text.grid(row=18, column=0, columnspan=4, sticky="we", pady=(6, 4))
     inventory_text.configure(state="disabled")
     ttk.Label(frame, textvariable=status_var, foreground="#b00020").grid(
-        row=18, column=0, columnspan=4, sticky="w", pady=(0, 8)
+        row=19, column=0, columnspan=4, sticky="w", pady=(0, 8)
     )
 
     button_bar = ttk.Frame(frame)
-    button_bar.grid(row=19, column=0, columnspan=4, sticky="e", pady=(4, 0))
+    button_bar.grid(row=20, column=0, columnspan=4, sticky="e", pady=(4, 0))
 
     def refresh_alarm_status(*_args):
         threshold, duration = _clamp_alarm_pid(
@@ -1580,6 +1588,7 @@ def show_startup_launcher(args):
         args.uvc_try_index1 = bool(try_index1_var.get())
         args.fullscreen = bool(fullscreen_var.get())
         args.clear_alarm_startup = bool(clear_alarm_var.get())
+        args.auto_arm_halt_startup = bool(auto_arm_halt_var.get())
         args.alarm_threshold, args.alarm_duration = _clamp_alarm_pid(
             alarm_threshold_var.get(),
             alarm_duration_var.get(),
@@ -2566,6 +2575,9 @@ def parse_args():
     p.add_argument("--clear-alarm-startup", dest="clear_alarm_startup", action="store_true", help="Clear any latched controller alarm during startup")
     p.add_argument("--no-clear-alarm-startup", dest="clear_alarm_startup", action="store_false", help="Do not clear latched controller alarms during startup")
     p.set_defaults(clear_alarm_startup=None)
+    p.add_argument("--auto-arm-halt-startup", dest="auto_arm_halt_startup", action="store_true", help="Arm halt protection automatically after startup settles")
+    p.add_argument("--no-auto-arm-halt-startup", dest="auto_arm_halt_startup", action="store_false", help="Leave halt protection disarmed after startup")
+    p.set_defaults(auto_arm_halt_startup=None)
     p.add_argument("--alarm-threshold", type=float, default=None, help="Robot halt threshold")
     p.add_argument("--alarm-duration", type=float, default=None, help="Robot halt duration")
 
@@ -2806,12 +2818,20 @@ class SharedState:
 
 
 class RobotThread(threading.Thread):
-    def __init__(self, state: SharedState, host: str, port: int, clear_alarm_on_launch: bool = True):
+    def __init__(
+        self,
+        state: SharedState,
+        host: str,
+        port: int,
+        clear_alarm_on_launch: bool = True,
+        auto_arm_halt_startup: bool = False,
+    ):
         super().__init__(daemon=True)
         self.state      = state
         self.host       = host
         self.port       = port
         self.clear_alarm_on_launch = bool(clear_alarm_on_launch)
+        self.auto_arm_halt_startup = bool(auto_arm_halt_startup)
         self.stop_event = threading.Event()
         self.cmd_q      = queue.Queue()
         self.robot      = None
@@ -4357,7 +4377,9 @@ class RobotThread(threading.Thread):
             if self.clear_alarm_on_launch:
                 self._clear_alarm_latch("after default move")
             settled = self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
-            if settled:
+            if not self.auto_arm_halt_startup:
+                print("[Startup] Halt protection left DISARMED by launcher setting. Arm it manually from the UI when ready.")
+            elif settled:
                 try:
                     self._refresh_from_robot()
                 except Exception:
@@ -6357,6 +6379,7 @@ def main():
         host=args.host,
         port=args.port,
         clear_alarm_on_launch=bool(getattr(args, "clear_alarm_startup", True)),
+        auto_arm_halt_startup=bool(getattr(args, "auto_arm_halt_startup", False)),
     )
     rt.start()
 
