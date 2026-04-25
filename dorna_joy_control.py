@@ -1190,7 +1190,7 @@ def load_startup_settings(path=STARTUP_SETTINGS_PATH):
         "startup_uvc_try_index1": False,
         "startup_fullscreen": False,
         "startup_clear_alarm": True,
-        "startup_auto_arm_halt": False,
+        "startup_apply_halt_settings": True,
         "startup_alarm_threshold": DEFAULT_PID_THRESHOLD_MAIN,
         "startup_alarm_duration": DEFAULT_PID_DURATION_MAIN,
         "startup_show_launcher": True,
@@ -1283,8 +1283,8 @@ def _resolve_startup_args(args, settings):
         args.fullscreen = bool(settings.get("startup_fullscreen", False))
     if getattr(args, "clear_alarm_startup", None) is None:
         args.clear_alarm_startup = bool(settings.get("startup_clear_alarm", True))
-    if getattr(args, "auto_arm_halt_startup", None) is None:
-        args.auto_arm_halt_startup = bool(settings.get("startup_auto_arm_halt", False))
+    if getattr(args, "apply_halt_settings_startup", None) is None:
+        args.apply_halt_settings_startup = bool(settings.get("startup_apply_halt_settings", True))
     args.alarm_threshold = float(
         args.alarm_threshold
         if getattr(args, "alarm_threshold", None) is not None
@@ -1313,7 +1313,7 @@ def _persist_startup_args(settings, args):
     settings["startup_uvc_try_index1"] = bool(args.uvc_try_index1)
     settings["startup_fullscreen"] = bool(args.fullscreen)
     settings["startup_clear_alarm"] = bool(getattr(args, "clear_alarm_startup", True))
-    settings["startup_auto_arm_halt"] = bool(getattr(args, "auto_arm_halt_startup", False))
+    settings["startup_apply_halt_settings"] = bool(getattr(args, "apply_halt_settings_startup", True))
     threshold, duration = _clamp_alarm_pid(
         getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN),
         getattr(args, "alarm_duration", DEFAULT_PID_DURATION_MAIN),
@@ -1363,7 +1363,7 @@ def show_startup_launcher(args):
     try_index1_var = tk.BooleanVar(value=bool(args.uvc_try_index1))
     fullscreen_var = tk.BooleanVar(value=bool(args.fullscreen))
     clear_alarm_var = tk.BooleanVar(value=bool(getattr(args, "clear_alarm_startup", True)))
-    auto_arm_halt_var = tk.BooleanVar(value=bool(getattr(args, "auto_arm_halt_startup", False)))
+    apply_halt_settings_var = tk.BooleanVar(value=bool(getattr(args, "apply_halt_settings_startup", True)))
     alarm_threshold_var = tk.DoubleVar(
         value=float(getattr(args, "alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
     )
@@ -1442,7 +1442,7 @@ def show_startup_launcher(args):
     ttk.Checkbutton(frame, text="Clear latched alarms on startup", variable=clear_alarm_var).grid(
         row=8, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
-    ttk.Checkbutton(frame, text="Auto-arm halt protection after startup", variable=auto_arm_halt_var).grid(
+    ttk.Checkbutton(frame, text="Apply halt settings on startup", variable=apply_halt_settings_var).grid(
         row=9, column=0, columnspan=4, sticky="w", pady=(4, 0)
     )
     ttk.Label(frame, text="Halt threshold").grid(row=10, column=0, sticky="w", pady=(8, 0))
@@ -1588,7 +1588,7 @@ def show_startup_launcher(args):
         args.uvc_try_index1 = bool(try_index1_var.get())
         args.fullscreen = bool(fullscreen_var.get())
         args.clear_alarm_startup = bool(clear_alarm_var.get())
-        args.auto_arm_halt_startup = bool(auto_arm_halt_var.get())
+        args.apply_halt_settings_startup = bool(apply_halt_settings_var.get())
         args.alarm_threshold, args.alarm_duration = _clamp_alarm_pid(
             alarm_threshold_var.get(),
             alarm_duration_var.get(),
@@ -2575,9 +2575,9 @@ def parse_args():
     p.add_argument("--clear-alarm-startup", dest="clear_alarm_startup", action="store_true", help="Clear any latched controller alarm during startup")
     p.add_argument("--no-clear-alarm-startup", dest="clear_alarm_startup", action="store_false", help="Do not clear latched controller alarms during startup")
     p.set_defaults(clear_alarm_startup=None)
-    p.add_argument("--auto-arm-halt-startup", dest="auto_arm_halt_startup", action="store_true", help="Arm halt protection automatically after startup settles")
-    p.add_argument("--no-auto-arm-halt-startup", dest="auto_arm_halt_startup", action="store_false", help="Leave halt protection disarmed after startup")
-    p.set_defaults(auto_arm_halt_startup=None)
+    p.add_argument("--apply-halt-settings-startup", dest="apply_halt_settings_startup", action="store_true", help="Apply halt threshold/duration automatically after startup settles")
+    p.add_argument("--no-apply-halt-settings-startup", dest="apply_halt_settings_startup", action="store_false", help="Skip applying halt threshold/duration on startup")
+    p.set_defaults(apply_halt_settings_startup=None)
     p.add_argument("--alarm-threshold", type=float, default=None, help="Robot halt threshold")
     p.add_argument("--alarm-duration", type=float, default=None, help="Robot halt duration")
 
@@ -2824,14 +2824,14 @@ class RobotThread(threading.Thread):
         host: str,
         port: int,
         clear_alarm_on_launch: bool = True,
-        auto_arm_halt_startup: bool = False,
+        apply_halt_settings_startup: bool = True,
     ):
         super().__init__(daemon=True)
         self.state      = state
         self.host       = host
         self.port       = port
         self.clear_alarm_on_launch = bool(clear_alarm_on_launch)
-        self.auto_arm_halt_startup = bool(auto_arm_halt_startup)
+        self.apply_halt_settings_startup = bool(apply_halt_settings_startup)
         self.stop_event = threading.Event()
         self.cmd_q      = queue.Queue()
         self.robot      = None
@@ -2932,7 +2932,6 @@ class RobotThread(threading.Thread):
             pass
         for axis in range(6):
             self.robot.set_pid(index=axis, threshold=threshold, duration=duration)
-        self.robot.set_alarm(1)
         with self.state.lock:
             self.state.settings["alarm_threshold"] = threshold
             self.state.settings["alarm_duration"] = duration
@@ -4377,28 +4376,14 @@ class RobotThread(threading.Thread):
             if self.clear_alarm_on_launch:
                 self._clear_alarm_latch("after default move")
             settled = self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
-            if not self.auto_arm_halt_startup:
-                print("[Startup] Halt protection left DISARMED by launcher setting. Arm it manually from the UI when ready.")
+            if not self.apply_halt_settings_startup:
+                print("[Startup] Skipped applying halt settings by launcher setting.")
             elif settled:
                 try:
                     self._refresh_from_robot()
                 except Exception:
                     pass
                 self._apply_alarm_pid(startup_alarm_threshold, startup_alarm_duration, persist=False)
-                time.sleep(0.2)
-                startup_alarm_state = None
-                try:
-                    startup_alarm_state = robot.get_alarm()
-                except Exception:
-                    startup_alarm_state = None
-                if startup_alarm_state not in (0, False, None):
-                    if self.clear_alarm_on_launch:
-                        self._clear_alarm_latch("after startup re-arm")
-                    print(
-                        "⚠️ Selected halt settings triggered immediately after startup; "
-                        "controller alarm left disabled for this session. "
-                        "Raise threshold/duration and re-test from the launcher."
-                    )
         except Exception as e:
             print(f"⚠️ Could not apply selected halt settings after startup move: {e}")
 
@@ -4830,7 +4815,7 @@ class RobotThread(threading.Thread):
                     elif typ == "disarm_alarm":
                         try:
                             self._clear_alarm_latch("manual disarm")
-                            print("[Halt] Protection disarmed for this session.")
+                            print("[Halt] Cleared latched controller alarm.")
                         except Exception as e:
                             print(f"⚠️ disarm_alarm failed: {e}")
                         continue
@@ -6379,7 +6364,7 @@ def main():
         host=args.host,
         port=args.port,
         clear_alarm_on_launch=bool(getattr(args, "clear_alarm_startup", True)),
-        auto_arm_halt_startup=bool(getattr(args, "auto_arm_halt_startup", False)),
+        apply_halt_settings_startup=bool(getattr(args, "apply_halt_settings_startup", True)),
     )
     rt.start()
 
@@ -6729,9 +6714,9 @@ def main():
             {"label": "— Settings —", "kind": "header"},
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
-            {"label": f"Halt protection: {'ARMED' if getattr(state, 'alarm_armed', False) else 'DISARMED'}", "kind": "alarm_status"},
-            {"label": "Arm Halt Protection Now", "kind": "alarm_arm_now"},
-            {"label": "Disarm Halt Protection", "kind": "alarm_disarm_now"},
+            {"label": "Halt settings apply automatically on startup.", "kind": "alarm_status"},
+            {"label": "Apply Halt Settings Now", "kind": "alarm_arm_now"},
+            {"label": "Clear Latched Alarm", "kind": "alarm_disarm_now"},
             {"label": f"Halt threshold: {int(round(alarm_threshold))}", "kind": "alarm_threshold"},
             {"label": f"Halt duration: {int(round(alarm_duration))}", "kind": "alarm_duration"},
             {"label": "Quit", "kind": "quit_app"},
