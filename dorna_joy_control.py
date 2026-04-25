@@ -1585,18 +1585,19 @@ def _launcher_test_alarm_pid_candidate(
 
 
 def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration: float, progress_cb=None):
-    baseline_threshold, baseline_duration = _clamp_alarm_pid(threshold, duration)
+    requested_threshold, requested_duration = _clamp_alarm_pid(threshold, duration)
     _launcher_tune_log(
         progress_cb,
         "[HaltTune] Auto-tuning in launcher: connect, move to Default, and search for the most sensitive stable halt settings.",
     )
     _launcher_tune_log(
         progress_cb,
-        f"[HaltTune] Auto-tuning at Default pose. Upper bound threshold={int(baseline_threshold)}, duration={int(baseline_duration)}.",
+        f"[HaltTune] Requested starting point threshold={int(requested_threshold)}, duration={int(requested_duration)}.",
     )
     _launcher_tune_log(
         progress_cb,
-        "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met.",
+        "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
+        f"(up to threshold={int(DEFAULT_PID_THRESHOLD_MAX)}, duration={int(DEFAULT_PID_DURATION_MAX)}).",
     )
 
     alarm_latch = _AlarmEventLatch()
@@ -1650,37 +1651,12 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
         ):
             return None
 
-        if not _launcher_test_alarm_pid_candidate(
-            robot,
-            alarm_latch,
-            baseline_threshold,
-            baseline_duration,
-            progress_cb=progress_cb,
-            hold_s=0.75,
-        ):
-            _launcher_tune_log(progress_cb, "[HaltTune] Requested baseline was not stable; retrying from stock values.")
-            baseline_threshold = DEFAULT_PID_THRESHOLD_MAIN
-            baseline_duration = DEFAULT_PID_DURATION_MAIN
-            if not _launcher_test_alarm_pid_candidate(
-                robot,
-                alarm_latch,
-                baseline_threshold,
-                baseline_duration,
-                progress_cb=progress_cb,
-                hold_s=0.75,
-            ):
-                _launcher_tune_log(
-                    progress_cb,
-                    "⚠️ [HaltTune] Stock halt settings were not stable at Default pose; aborting auto-tune.",
-                )
-                return None
-
-        tuned_threshold = int(baseline_threshold)
-        tuned_duration = int(baseline_duration)
+        tuned_threshold = None
+        tuned_duration = None
         found = False
 
-        for threshold_candidate in _build_alarm_threshold_values(int(baseline_threshold)):
-            for duration_candidate in _build_alarm_duration_values(int(baseline_duration)):
+        for threshold_candidate in _build_alarm_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
+            for duration_candidate in _build_alarm_duration_values(int(DEFAULT_PID_DURATION_MAX)):
                 if _launcher_test_alarm_pid_candidate(
                     robot,
                     alarm_latch,
@@ -1695,6 +1671,13 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
                     break
             if found:
                 break
+
+        if not found or tuned_threshold is None or tuned_duration is None:
+            _launcher_tune_log(
+                progress_cb,
+                "⚠️ [HaltTune] No stable halt settings were found at Default pose within the allowed range.",
+            )
+            return None
 
         _launcher_apply_alarm_pid(
             robot,
@@ -3634,13 +3617,14 @@ class RobotThread(threading.Thread):
         return stable
 
     def _auto_tune_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
-        baseline_threshold, baseline_duration = _clamp_alarm_pid(threshold, duration)
+        requested_threshold, requested_duration = _clamp_alarm_pid(threshold, duration)
         print(
             "[HaltTune] Auto-tuning at Default pose. "
-            f"Upper bound threshold={int(baseline_threshold)}, duration={int(baseline_duration)}."
+            f"Requested starting point threshold={int(requested_threshold)}, duration={int(requested_duration)}."
         )
         print(
-            "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met."
+            "[HaltTune] Starting from the most sensitive pair and increasing slowly until no alarm is met "
+            f"(up to threshold={int(DEFAULT_PID_THRESHOLD_MAX)}, duration={int(DEFAULT_PID_DURATION_MAX)})."
         )
 
         try:
@@ -3653,14 +3637,6 @@ class RobotThread(threading.Thread):
                 self._wait_for_joint_settle(max_wait_s=4.0, stable_for_s=1.0, tol_deg=0.05)
         except Exception as e:
             print(f"⚠️ [HaltTune] Could not confirm Default pose before tuning: {e}")
-
-        if not self._test_alarm_pid_candidate(baseline_threshold, baseline_duration, hold_s=0.75):
-            print("[HaltTune] Requested baseline was not stable; retrying from stock values.")
-            baseline_threshold = DEFAULT_PID_THRESHOLD_MAIN
-            baseline_duration = DEFAULT_PID_DURATION_MAIN
-            if not self._test_alarm_pid_candidate(baseline_threshold, baseline_duration, hold_s=0.75):
-                print("⚠️ [HaltTune] Stock halt settings were not stable at Default pose; aborting auto-tune.")
-                return None
 
         def build_threshold_values(limit: int):
             vals = [int(DEFAULT_PID_THRESHOLD_MIN)]
@@ -3710,12 +3686,12 @@ class RobotThread(threading.Thread):
                     vals.append(cur)
             return vals
 
-        tuned_threshold = int(baseline_threshold)
-        tuned_duration = int(baseline_duration)
+        tuned_threshold = None
+        tuned_duration = None
         found = False
 
-        for threshold_candidate in build_threshold_values(int(baseline_threshold)):
-            for duration_candidate in build_duration_values(int(baseline_duration)):
+        for threshold_candidate in build_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
+            for duration_candidate in build_duration_values(int(DEFAULT_PID_DURATION_MAX)):
                 if self._test_alarm_pid_candidate(threshold_candidate, duration_candidate, hold_s=0.75):
                     tuned_threshold = int(threshold_candidate)
                     tuned_duration = int(duration_candidate)
@@ -3724,9 +3700,9 @@ class RobotThread(threading.Thread):
             if found:
                 break
 
-        if not found:
-            tuned_threshold = int(baseline_threshold)
-            tuned_duration = int(baseline_duration)
+        if not found or tuned_threshold is None or tuned_duration is None:
+            print("⚠️ [HaltTune] No stable halt settings were found at Default pose within the allowed range.")
+            return None
 
         self._apply_alarm_pid(tuned_threshold, tuned_duration, persist=persist)
         print(
