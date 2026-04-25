@@ -2869,6 +2869,23 @@ class RobotThread(threading.Thread):
         self.j5_test_stop = threading.Event()
         self.j5_test_resume_event = threading.Event()
         self.last_pose_refresh = time.time()
+        self.alarm_state_lock = threading.Lock()
+        self.alarm_latched = False
+        self.last_alarm_msg = None
+
+    def _on_robot_event(self, msg, union, **kwargs):
+        if not isinstance(msg, dict):
+            return
+        if msg.get("cmd") != "alarm":
+            return
+        alarm_val = msg.get("alarm")
+        with self.alarm_state_lock:
+            if alarm_val in (1, 1.0, True):
+                self.alarm_latched = True
+                self.last_alarm_msg = dict(msg)
+            elif alarm_val in (0, 0.0, False):
+                self.alarm_latched = False
+                self.last_alarm_msg = dict(msg)
 
     def _update_tcp_from_settings(self):
         """Sync kinematic TCP with current tool center/length settings."""
@@ -2949,6 +2966,9 @@ class RobotThread(threading.Thread):
 
     def _apply_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
         threshold, duration = _clamp_alarm_pid(threshold, duration)
+        with self.alarm_state_lock:
+            self.alarm_latched = False
+            self.last_alarm_msg = None
         try:
             self.robot.set_alarm(0)
             time.sleep(0.05)
@@ -2972,12 +2992,14 @@ class RobotThread(threading.Thread):
 
     def _clear_alarm_latch(self, context: str = "startup"):
         try:
-            self.robot.set_alarm(0)
+            stat = self.robot.set_alarm(0)
             time.sleep(0.05)
-            state = self.robot.get_alarm()
+            with self.alarm_state_lock:
+                self.alarm_latched = False
+                self.last_alarm_msg = None
             with self.state.lock:
                 self.state.alarm_armed = False
-            print(f"[Startup] Cleared controller alarm ({context}); state={state}")
+            print(f"[Startup] Cleared controller alarm ({context}); stat={stat}")
             return True
         except Exception as e:
             print(f"⚠️ Could not clear controller alarm during {context}: {e}")
@@ -3017,11 +3039,8 @@ class RobotThread(threading.Thread):
         self._apply_alarm_pid(threshold, duration, persist=persist)
 
     def _is_alarm_latched(self):
-        try:
-            state = self.robot.get_alarm()
-            return state not in (0, 0.0, False, None)
-        except Exception:
-            return False
+        with self.alarm_state_lock:
+            return bool(self.alarm_latched)
 
     def _hold_without_alarm(self, hold_s: float = 0.75, poll_s: float = 0.05):
         end_t = time.time() + max(0.0, float(hold_s))
@@ -3038,6 +3057,10 @@ class RobotThread(threading.Thread):
         settled = self._wait_for_joint_settle(max_wait_s=2.0, stable_for_s=0.35, tol_deg=0.05)
         stable = bool(settled) and self._hold_without_alarm(hold_s=hold_s, poll_s=0.05)
         if not stable:
+            with self.alarm_state_lock:
+                alarm_msg = dict(self.last_alarm_msg) if isinstance(self.last_alarm_msg, dict) else None
+            if alarm_msg:
+                print(f"[HaltTune] Alarm during test: {alarm_msg}")
             self._clear_alarm_latch(f"after testing {int(threshold)}/{int(duration)}")
         return stable
 
@@ -4476,6 +4499,10 @@ class RobotThread(threading.Thread):
             sys.exit(1)
 
         print(f"[Robot] Kinematic model: {getattr(robot, 'model', 'unknown')} (n_dof={getattr(robot.kinematic, 'n_dof', '?')})")
+        try:
+            robot.add_event(self._on_robot_event)
+        except Exception as e:
+            print(f"⚠️ Could not register robot alarm event hook: {e}")
         try:
             with self.state.lock:
                 startup_alarm_threshold = float(
