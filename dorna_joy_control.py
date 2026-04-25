@@ -2727,6 +2727,7 @@ class SharedState:
         )
         self.alarm_threshold = float(self.settings.get("alarm_threshold", DEFAULT_PID_THRESHOLD_MAIN))
         self.alarm_duration = float(self.settings.get("alarm_duration", DEFAULT_PID_DURATION_MAIN))
+        self.alarm_armed = False
         self.tool_center_demo_mode = "circle"
         self.approach_mm = float(self.settings.get("approach_mm", DEFAULT_APPROACH_MM))
         self.tool_center_demo = False
@@ -2904,6 +2905,11 @@ class RobotThread(threading.Thread):
 
     def _apply_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
         threshold, duration = _clamp_alarm_pid(threshold, duration)
+        try:
+            self.robot.set_alarm(0)
+            time.sleep(0.05)
+        except Exception:
+            pass
         for axis in range(6):
             self.robot.set_pid(index=axis, threshold=threshold, duration=duration)
         self.robot.set_alarm(1)
@@ -2912,6 +2918,7 @@ class RobotThread(threading.Thread):
             self.state.settings["alarm_duration"] = duration
             self.state.alarm_threshold = threshold
             self.state.alarm_duration = duration
+            self.state.alarm_armed = True
         if persist:
             save_settings(self.state.settings)
         print(
@@ -2924,6 +2931,8 @@ class RobotThread(threading.Thread):
             self.robot.set_alarm(0)
             time.sleep(0.05)
             state = self.robot.get_alarm()
+            with self.state.lock:
+                self.state.alarm_armed = False
             print(f"[Startup] Cleared controller alarm ({context}); state={state}")
             return True
         except Exception as e:
@@ -4794,6 +4803,14 @@ class RobotThread(threading.Thread):
                             self._apply_alarm_pid(threshold, duration, persist=True)
                         except Exception as e:
                             print(f"⚠️ set_alarm_pid failed: {e}")
+                        continue
+
+                    elif typ == "disarm_alarm":
+                        try:
+                            self._clear_alarm_latch("manual disarm")
+                            print("[Halt] Protection disarmed for this session.")
+                        except Exception as e:
+                            print(f"⚠️ disarm_alarm failed: {e}")
                         continue
 
                     elif typ == "set_alarm_sensitivity":
@@ -6689,6 +6706,9 @@ def main():
             {"label": "— Settings —", "kind": "header"},
             {"label": "Load settings.json", "kind": "settings_load"},
             {"label": "Save settings.json", "kind": "settings_save"},
+            {"label": f"Halt protection: {'ARMED' if getattr(state, 'alarm_armed', False) else 'DISARMED'}", "kind": "alarm_status"},
+            {"label": "Arm Halt Protection Now", "kind": "alarm_arm_now"},
+            {"label": "Disarm Halt Protection", "kind": "alarm_disarm_now"},
             {"label": f"Halt threshold: {int(round(alarm_threshold))}", "kind": "alarm_threshold"},
             {"label": f"Halt duration: {int(round(alarm_duration))}", "kind": "alarm_duration"},
             {"label": "Quit", "kind": "quit_app"},
@@ -8476,6 +8496,17 @@ def main():
                 total_h += bh + btn_gap
                 y_off_btn += bh + btn_gap
                 continue
+            if kind == "alarm_status":
+                surf_txt = placeholder_font.render(
+                    b["label"],
+                    True,
+                    (255, 220, 120) if getattr(state, "alarm_armed", False) else (180, 220, 255),
+                )
+                screen.blit(surf_txt, (tr_rect.x + m_ui, y_off_btn))
+                bh = surf_txt.get_height()
+                total_h += bh + btn_gap
+                y_off_btn += bh + btn_gap
+                continue
 
             if kind == "tool_preset_row":
                 nm = b.get("preset", "")
@@ -9615,6 +9646,16 @@ def main():
                                     settings_path_mode = "save"
                                     settings_path_text = SETTINGS_PATH
                                     settings_path_input_active = True
+                                    click_pos = None
+                                elif kind == "alarm_arm_now":
+                                    rt.enqueue({
+                                        "type": "set_alarm_pid",
+                                        "threshold": alarm_threshold_val,
+                                        "duration": alarm_duration_val,
+                                    })
+                                    click_pos = None
+                                elif kind == "alarm_disarm_now":
+                                    rt.enqueue({"type": "disarm_alarm"})
                                     click_pos = None
                                 elif kind == "routine_stop":
                                     if routine_executor and routine_executor.is_alive():
