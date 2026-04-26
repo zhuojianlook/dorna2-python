@@ -1824,6 +1824,7 @@ def _launcher_test_alarm_pid_candidate(
         pass
     poses = load_poses()
     default_pose = poses.get("Default", DEFAULT_POSES["Default"]).copy()
+    reload_pose = poses.get("Reload", DEFAULT_POSES["Reload"]).copy()
     go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
     go.update(default_pose)
     _launcher_tune_log(progress_cb, "[HaltTune] Returning to Default pose before candidate test.")
@@ -1849,30 +1850,22 @@ def _launcher_test_alarm_pid_candidate(
     if not stable:
         _launcher_tune_log(progress_cb, "[HaltTune] Candidate failed immediately after arming at Default; skipping movement phase.")
     if stable:
-        for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
+        for pose_name, pose, label in (
+            ("Reload", reload_pose, "Default -> Reload"),
+            ("Default", default_pose, "Reload -> Default"),
+        ):
             try:
-                pose = robot.get_all_pose()[:6]
-                x, y, z, a, b, c = [float(v) for v in pose]
-                R = axis_angle_to_R(a, b, c)
-                tz = R[:, 2]
-                dx, dy, dz = tz[0] * dist_mm, tz[1] * dist_mm, tz[2] * dist_mm
                 _launcher_tune_log(
                     progress_cb,
-                    f"[HaltTune] Movement test: left-stick {label} equivalent along tool axis for {abs(int(dist_mm))} mm.",
+                    f"[HaltTune] Movement test: {label} pose transition.",
                 )
-                robot.play_dict({
-                    "cmd": "lmove",
-                    "rel": 1,
-                    "x": float(dx),
-                    "y": float(dy),
-                    "z": float(dz),
-                    "vel": HALT_TUNE_MOVE_VEL,
-                    "cont": 0,
-                })
+                go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+                go.update(pose)
+                robot.play_dict(go)
                 settled = _launcher_wait_for_joint_settle(
                     robot,
                     progress_cb=progress_cb,
-                    max_wait_s=max(4.0, abs(dist_mm) / max(1e-6, HALT_TUNE_MOVE_VEL) + 2.0),
+                    max_wait_s=8.0,
                     stable_for_s=0.35,
                     tol_deg=0.05,
                 )
@@ -1882,9 +1875,9 @@ def _launcher_test_alarm_pid_candidate(
                     poll_s=0.05,
                 )
                 if not stable:
-                    _launcher_tune_log(progress_cb, f"[HaltTune] Candidate failed after the {label} movement phase.")
+                    _launcher_tune_log(progress_cb, f"[HaltTune] Candidate failed after the {pose_name} movement phase.")
             except Exception as e:
-                _launcher_tune_log(progress_cb, f"⚠️ [HaltTune] Movement test failed during {label} move: {e}")
+                _launcher_tune_log(progress_cb, f"⚠️ [HaltTune] Movement test failed during {pose_name} move: {e}")
                 stable = False
             if not stable:
                 break
@@ -4041,6 +4034,11 @@ class RobotThread(threading.Thread):
             self.robot.set_motor(1)
             with self.state.lock:
                 default_pose = self.state.poses.get("Default", {}).copy()
+                reload_pose = self.state.poses.get("Reload", {}).copy()
+            if not default_pose:
+                default_pose = DEFAULT_POSES["Default"].copy()
+            if not reload_pose:
+                reload_pose = DEFAULT_POSES["Reload"].copy()
             if default_pose:
                 print("[HaltTune] Returning to Default pose before candidate test.")
                 if not self._queue_jmove_to_pose(default_pose):
@@ -4060,17 +4058,18 @@ class RobotThread(threading.Thread):
         if not stable:
             print("[HaltTune] Candidate failed immediately after arming at Default; skipping movement phase.")
         if stable:
-            for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
+            for pose_name, pose, label in (
+                ("Reload", reload_pose, "Default -> Reload"),
+                ("Default", default_pose, "Reload -> Default"),
+            ):
                 try:
-                    print(
-                        f"[HaltTune] Movement test: left-stick {label} equivalent along tool axis "
-                        f"for {abs(int(dist_mm))} mm."
-                    )
-                    if not self._tool_move_along_tz(dist_mm, cont=0):
+                    print(f"[HaltTune] Movement test: {label} pose transition.")
+                    if not self._queue_jmove_to_pose(pose):
                         stable = False
                         break
+                    self._set_current_named(pose_name)
                     settled = self._wait_for_joint_settle(
-                        max_wait_s=max(4.0, abs(dist_mm) / max(1e-6, self.VT) + 2.0),
+                        max_wait_s=8.0,
                         stable_for_s=0.35,
                         tol_deg=0.05,
                     )
@@ -4079,9 +4078,9 @@ class RobotThread(threading.Thread):
                         poll_s=0.05,
                     )
                     if not stable:
-                        print(f"[HaltTune] Candidate failed after the {label} movement phase.")
+                        print(f"[HaltTune] Candidate failed after the {pose_name} movement phase.")
                 except Exception as e:
-                    print(f"⚠️ [HaltTune] Movement test failed during {label} move: {e}")
+                    print(f"⚠️ [HaltTune] Movement test failed during {pose_name} move: {e}")
                     stable = False
                 if not stable:
                     break
