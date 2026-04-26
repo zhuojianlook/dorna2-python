@@ -517,7 +517,11 @@ class UvcThread(threading.Thread):
 
     def latest(self):
         with self._lock:
-            return None if self._frame is None else self._frame.copy()
+            # Return the latest immutable frame reference directly. Capture
+            # threads replace self._frame with a new ndarray; they do not mutate
+            # previously published frames in place. Avoiding a full copy here
+            # materially reduces per-frame memory churn in the live UI.
+            return self._frame
 
     def status(self):
         return self._status
@@ -632,7 +636,7 @@ class RealSenseThread(threading.Thread):
 
     def latest(self):
         with self._lock:
-            return None if self._frame is None else self._frame.copy()
+            return self._frame
 
     def status(self):
         return self._status
@@ -6477,7 +6481,7 @@ def blit_frame_fit(screen, frame_bgr, rect):
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     surf = pygame.image.frombuffer(rgb.tobytes(), (fw, fh), "RGB")
     if (fw, fh) != (new_w, new_h):
-        surf = pygame.transform.smoothscale(surf, (new_w, new_h))
+        surf = pygame.transform.scale(surf, (new_w, new_h))
     screen.blit(surf, (x + (w - new_w)//2, y + (h - new_h)//2))
     return True
 
@@ -6494,7 +6498,7 @@ def blit_frame_cover(screen, frame_bgr, rect):
     rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     base = pygame.image.frombuffer(rgb.tobytes(), (fw, fh), "RGB")
     if (new_w, new_h) != (fw, fh):
-        base = pygame.transform.smoothscale(base, (new_w, new_h))
+        base = pygame.transform.scale(base, (new_w, new_h))
     crop_x = max(0, (new_w - w) // 2)
     crop_y = max(0, (new_h - h) // 2)
     area = pygame.Rect(crop_x, crop_y, w, h)
