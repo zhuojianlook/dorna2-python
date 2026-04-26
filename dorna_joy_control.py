@@ -801,7 +801,7 @@ HALT_TUNE_DURATION_MIN = DEFAULT_PID_DURATION_MIN
 HALT_TUNE_DURATION_MAX = 1000.0
 HALT_TUNE_BASELINE_DURATION_MAX = 10000.0
 HALT_TUNE_MOVE_MM = 50.0
-HALT_TUNE_MOVE_VEL = 10.0
+HALT_TUNE_MOVE_VEL = 25.0  # 500% manual speed scale equivalent
 HALT_TUNE_HOLD_S = 0.75
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
@@ -1825,7 +1825,7 @@ def _launcher_test_alarm_pid_candidate(
     poses = load_poses()
     default_pose = poses.get("Default", DEFAULT_POSES["Default"]).copy()
     reload_pose = poses.get("Reload", DEFAULT_POSES["Reload"]).copy()
-    go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+    go = {"cmd": "jmove", "rel": 0, "vel": HALT_TUNE_MOVE_VEL}
     go.update(default_pose)
     _launcher_tune_log(progress_cb, "[HaltTune] Returning to Default pose before candidate test.")
     robot.play_dict(go)
@@ -1859,7 +1859,7 @@ def _launcher_test_alarm_pid_candidate(
                     progress_cb,
                     f"[HaltTune] Movement test: {label} pose transition.",
                 )
-                go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+                go = {"cmd": "jmove", "rel": 0, "vel": HALT_TUNE_MOVE_VEL}
                 go.update(pose)
                 robot.play_dict(go)
                 settled = _launcher_wait_for_joint_settle(
@@ -1900,7 +1900,7 @@ def _launcher_test_alarm_pid_candidate(
                 progress_cb=progress_cb,
             )
             robot.set_motor(1)
-            go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+            go = {"cmd": "jmove", "rel": 0, "vel": HALT_TUNE_MOVE_VEL}
             go.update(default_pose)
             _launcher_tune_log(progress_cb, "[HaltTune] Returning to Default after failed candidate test.")
             robot.play_dict(go)
@@ -4066,7 +4066,7 @@ class RobotThread(threading.Thread):
                 reload_pose = DEFAULT_POSES["Reload"].copy()
             if default_pose:
                 print("[HaltTune] Returning to Default pose before candidate test.")
-                if not self._queue_jmove_to_pose(default_pose):
+                if not self._queue_jmove_to_pose(default_pose, vel=HALT_TUNE_MOVE_VEL):
                     self._clear_alarm_latch("after failed candidate setup")
                     return False
                 self._set_current_named("Default")
@@ -4089,7 +4089,7 @@ class RobotThread(threading.Thread):
             ):
                 try:
                     print(f"[HaltTune] Movement test: {label} pose transition.")
-                    if not self._queue_jmove_to_pose(pose):
+                    if not self._queue_jmove_to_pose(pose, vel=HALT_TUNE_MOVE_VEL):
                         stable = False
                         break
                     self._set_current_named(pose_name)
@@ -4120,7 +4120,7 @@ class RobotThread(threading.Thread):
                 self._clear_alarm_latch("before returning to Default after failed test")
                 self.robot.set_motor(1)
                 print("[HaltTune] Returning to Default after failed candidate test.")
-                if self._queue_jmove_to_pose(default_pose):
+                if self._queue_jmove_to_pose(default_pose, vel=HALT_TUNE_MOVE_VEL):
                     self._set_current_named("Default")
                     self._wait_for_joint_settle(
                         max_wait_s=8.0,
@@ -4743,12 +4743,14 @@ class RobotThread(threading.Thread):
                 time.time() + max(0.0, seconds)
             )
 
-    def _queue_jmove_to_pose(self, pose: dict):
+    def _queue_jmove_to_pose(self, pose: dict, vel: float = None):
         target_joints = {axis: pose[axis] for axis in COLLISION_JOINT_AXES if axis in pose}
         merged_target = self._merge_joint_target(target_joints)
         if merged_target is not None and not self._guard_joint_target(merged_target, "joint move", sweep=True):
             return False
-        go = {"cmd":"jmove","rel":0,"vel":self.VR_POSE}
+        if vel is None:
+            vel = self.VR_POSE
+        go = {"cmd":"jmove","rel":0,"vel":float(vel)}
         go.update(pose)
         self.robot.play_dict(go)
         self._mark_motion_for(0.6)
