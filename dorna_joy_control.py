@@ -779,7 +779,6 @@ HALT_TUNE_DURATION_MAX = 1000.0
 HALT_TUNE_MOVE_MM = 50.0
 HALT_TUNE_MOVE_VEL = 10.0
 HALT_TUNE_HOLD_S = 0.75
-HALT_TUNE_PREMOVE_HOLD_S = 0.2
 COLLISION_JOINT_AXES = ("j0", "j1", "j2", "j3", "j4", "j5")
 COLLISION_TCP_AXES = ("x", "y", "z", "a", "b", "c")
 DEFAULT_SELF_COLLISION = {
@@ -1740,13 +1739,9 @@ def _launcher_test_alarm_pid_candidate(
         stable_for_s=0.35,
         tol_deg=0.05,
     )
-    stable = bool(settled) and _launcher_hold_without_alarm(
-        alarm_latch,
-        hold_s=min(hold_s, HALT_TUNE_PREMOVE_HOLD_S),
-        poll_s=0.05,
-    )
+    stable = bool(settled) and (not alarm_latch.is_latched())
     if not stable:
-        _launcher_tune_log(progress_cb, "[HaltTune] Candidate failed the pre-move hold check; skipping movement phase.")
+        _launcher_tune_log(progress_cb, "[HaltTune] Candidate failed immediately after arming at Default; skipping movement phase.")
     if stable:
         for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
             try:
@@ -1775,7 +1770,11 @@ def _launcher_test_alarm_pid_candidate(
                     stable_for_s=0.35,
                     tol_deg=0.05,
                 )
-                stable = bool(settled) and _launcher_hold_without_alarm(alarm_latch, hold_s=0.35, poll_s=0.05)
+                stable = bool(settled) and _launcher_hold_without_alarm(
+                    alarm_latch,
+                    hold_s=min(hold_s, 0.35),
+                    poll_s=0.05,
+                )
                 if not stable:
                     _launcher_tune_log(progress_cb, f"[HaltTune] Candidate failed after the {label} movement phase.")
             except Exception as e:
@@ -3845,12 +3844,9 @@ class RobotThread(threading.Thread):
             return False
         self._apply_alarm_pid(threshold, duration, persist=False)
         settled = self._wait_for_joint_settle(max_wait_s=2.0, stable_for_s=0.35, tol_deg=0.05)
-        stable = bool(settled) and self._hold_without_alarm(
-            hold_s=min(hold_s, HALT_TUNE_PREMOVE_HOLD_S),
-            poll_s=0.05,
-        )
+        stable = bool(settled) and (not self._is_alarm_latched())
         if not stable:
-            print("[HaltTune] Candidate failed the pre-move hold check; skipping movement phase.")
+            print("[HaltTune] Candidate failed immediately after arming at Default; skipping movement phase.")
         if stable:
             for dist_mm, label in ((HALT_TUNE_MOVE_MM, "forward"), (-HALT_TUNE_MOVE_MM, "backward")):
                 try:
@@ -3866,7 +3862,10 @@ class RobotThread(threading.Thread):
                         stable_for_s=0.35,
                         tol_deg=0.05,
                     )
-                    stable = bool(settled) and self._hold_without_alarm(hold_s=0.35, poll_s=0.05)
+                    stable = bool(settled) and self._hold_without_alarm(
+                        hold_s=min(hold_s, 0.35),
+                        poll_s=0.05,
+                    )
                     if not stable:
                         print(f"[HaltTune] Candidate failed after the {label} movement phase.")
                 except Exception as e:
