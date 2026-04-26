@@ -9,6 +9,7 @@ import queue
 import re, glob
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 import math
 import pygame
@@ -1283,6 +1284,79 @@ def save_startup_halt_settings(threshold, duration):
     except Exception as e:
         print(f"⚠️ Could not save startup halt settings: {e}")
 
+LAUNCHER_RESULT_KEYS = (
+    "host",
+    "port",
+    "uvc1",
+    "uvc2",
+    "uvc_width",
+    "uvc_height",
+    "uvc_fps",
+    "rs_width",
+    "rs_height",
+    "rs_fps",
+    "uvc_try_index1",
+    "fullscreen",
+    "clear_alarm_startup",
+    "apply_halt_settings_startup",
+    "auto_tune_halt_startup",
+    "alarm_threshold",
+    "alarm_duration",
+    "launcher",
+)
+
+def _launcher_result_payload(args, ok: bool):
+    payload = {"ok": bool(ok)}
+    for key in LAUNCHER_RESULT_KEYS:
+        payload[key] = getattr(args, key, None)
+    return payload
+
+def _apply_launcher_result(args, payload):
+    for key in LAUNCHER_RESULT_KEYS:
+        if key in payload:
+            setattr(args, key, payload[key])
+    return args
+
+def _write_launcher_result_file(result_path, args, ok: bool):
+    if not result_path:
+        return
+    with open(result_path, "w", encoding="utf-8") as f:
+        json.dump(_launcher_result_payload(args, ok=ok), f, indent=2)
+
+def run_startup_launcher_subprocess():
+    fd, result_path = tempfile.mkstemp(prefix="dorna_launcher_", suffix=".json")
+    os.close(fd)
+    try:
+        cmd = [
+            sys.executable,
+            os.path.abspath(__file__),
+            *sys.argv[1:],
+            "--launcher-subprocess",
+            "--launcher-result-path",
+            result_path,
+        ]
+        completed = subprocess.run(cmd)
+        if completed.returncode != 0:
+            print(f"[Launcher] Launcher subprocess exited with code {completed.returncode}.")
+            return None
+        if not os.path.exists(result_path):
+            print("[Launcher] Launcher subprocess did not produce a result file.")
+            return None
+        with open(result_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            return None
+        return payload
+    except Exception as e:
+        print(f"[Launcher] Could not run launcher subprocess: {e}")
+        return None
+    finally:
+        try:
+            if os.path.exists(result_path):
+                os.remove(result_path)
+        except Exception:
+            pass
+
 def _format_uvc_inventory_label(item: dict) -> str:
     base = f"{item.get('name', 'Unknown')} [{os.path.basename(item.get('node', ''))}]"
     src = item.get("path", "")
@@ -1936,9 +2010,10 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
             "[HaltTune] Launcher auto-tune worker disconnected from the robot without disabling motors.",
         )
 
-def show_startup_launcher(args):
+def show_startup_launcher(args, result_path=None):
     if not os.environ.get("DISPLAY") and sys.platform not in ("win32", "darwin"):
         print("[Launcher] DISPLAY is not set; starting without the launcher UI.")
+        _write_launcher_result_file(result_path, args, ok=True)
         return args
 
     try:
@@ -1946,6 +2021,7 @@ def show_startup_launcher(args):
         from tkinter import messagebox, ttk
     except Exception as e:
         print(f"[Launcher] Could not start Tk launcher: {e}")
+        _write_launcher_result_file(result_path, args, ok=True)
         return args
 
     result = {"ok": False}
@@ -2505,6 +2581,16 @@ def show_startup_launcher(args):
     root.mainloop()
     cleanup_launcher()
 
+    launched = args if result["ok"] else None
+    if result_path:
+        try:
+            _write_launcher_result_file(
+                result_path,
+                launched or args,
+                ok=bool(result["ok"] and launched is not None),
+            )
+        except Exception as e:
+            print(f"[Launcher] Could not write launcher result file: {e}")
     if result["ok"]:
         return args
     return None
@@ -3484,6 +3570,8 @@ def parse_args():
     p.add_argument("--launcher", dest="launcher", action="store_true", help="Show the startup launcher window")
     p.add_argument("--no-launcher", dest="launcher", action="store_false", help="Skip the startup launcher window")
     p.set_defaults(fullscreen=None, launcher=None)
+    p.add_argument("--launcher-subprocess", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--launcher-result-path", default=None, help=argparse.SUPPRESS)
     p.add_argument("--ui-min-width", type=int, default=320, help="Minimum UI panel width (pixels)")
     p.add_argument("--ui-frac", type=float, default=0.28, help="UI width fraction of window (0..1)")
     return p.parse_args()
@@ -7271,11 +7359,24 @@ def main():
     args = parse_args()
     startup_settings = load_startup_settings()
     args = _resolve_startup_args(args, startup_settings)
+    if getattr(args, "launcher_subprocess", False):
+        if args.launcher:
+            show_startup_launcher(args, result_path=getattr(args, "launcher_result_path", None))
+        else:
+            result_path = getattr(args, "launcher_result_path", None)
+            if result_path:
+                try:
+                    with open(result_path, "w", encoding="utf-8") as f:
+                        json.dump(_launcher_result_payload(args, ok=True), f, indent=2)
+                except Exception as e:
+                    print(f"[Launcher] Could not write launcher result file: {e}")
+                    raise
+        return
     if args.launcher:
-        launched = show_startup_launcher(args)
-        if launched is None:
+        payload = run_startup_launcher_subprocess()
+        if payload is None:
             return
-        args = launched
+        args = _apply_launcher_result(args, payload)
     _persist_startup_args(startup_settings, args)
 
     # ─────────────────────────────────────────────────────────────
