@@ -42,6 +42,10 @@ DEFAULT_UVC_HEIGHT = 480
 DEFAULT_RS_WIDTH = 640
 DEFAULT_RS_HEIGHT = 480
 DEFAULT_RS_FPS = 30
+THERMAL_WARN_TEMP_C = 95.0
+THERMAL_CLEAR_TEMP_C = 90.0
+THERMAL_POLL_INTERVAL_S = 3.0
+THERMAL_WARNING_REPEAT_S = 30.0
 _V4L2_CTL = shutil.which("v4l2-ctl")
 _V4L2_CAPS_CACHE = {}
 
@@ -128,6 +132,43 @@ def _read_text(path):
             return f.read().strip()
     except Exception:
         return ""
+
+def _read_thermal_zones():
+    zones = []
+    for zone_dir in sorted(glob.glob("/sys/class/thermal/thermal_zone*")):
+        zone_type = _read_text(os.path.join(zone_dir, "type"))
+        raw_temp = _read_text(os.path.join(zone_dir, "temp"))
+        if not zone_type or not raw_temp:
+            continue
+        try:
+            temp_c = float(raw_temp)
+        except Exception:
+            continue
+        if temp_c > 1000.0:
+            temp_c /= 1000.0
+        if temp_c <= 0.0:
+            continue
+        zones.append({
+            "type": zone_type,
+            "temp_c": temp_c,
+        })
+    return zones
+
+def _pick_thermal_hotspot():
+    zones = _read_thermal_zones()
+    if not zones:
+        return None
+    preferred_names = ("x86_pkg_temp", "acpitz", "cpu-thermal", "soc_thermal")
+    preferred = [
+        zone for zone in zones
+        if zone.get("type", "").lower() in preferred_names
+    ]
+    sample_pool = preferred or zones
+    hottest = max(sample_pool, key=lambda zone: float(zone.get("temp_c", 0.0)))
+    return {
+        "type": str(hottest.get("type", "")),
+        "temp_c": float(hottest.get("temp_c", 0.0)),
+    }
 
 def _v4l_name_for_node(node):
     base = os.path.basename(node)  # videoN
@@ -7871,6 +7912,10 @@ def main():
     # Short-lived UI notices
     ui_notice_text = ""
     ui_notice_until = 0.0
+    thermal_status_text = ""
+    thermal_hot = False
+    thermal_last_poll = 0.0
+    thermal_last_notice = 0.0
 
     # ─────────────────────────────────────────────────────────────
     # Helper closures local to main()
@@ -8397,6 +8442,38 @@ def main():
         alarm_threshold_rect = None
         alarm_duration_rect = None
         tool_center_demo_mode = getattr(state, "tool_center_demo_mode", "circle")
+        now = time.time()
+
+        if (now - thermal_last_poll) >= THERMAL_POLL_INTERVAL_S:
+            thermal_last_poll = now
+            hotspot = _pick_thermal_hotspot()
+            if hotspot is not None:
+                temp_c = float(hotspot.get("temp_c", 0.0))
+                zone_name = str(hotspot.get("type", "thermal")).strip() or "thermal"
+                if temp_c >= THERMAL_WARN_TEMP_C:
+                    thermal_status_text = (
+                        f"Thermal warning: {zone_name} {temp_c:.0f} C; "
+                        "control lag may occur"
+                    )
+                    if (not thermal_hot) or ((now - thermal_last_notice) >= THERMAL_WARNING_REPEAT_S):
+                        print(
+                            f"[Thermal] High temperature detected "
+                            f"({zone_name} {temp_c:.1f} C). Control lag may occur."
+                        )
+                        ui_notice_text = thermal_status_text
+                        ui_notice_until = now + 5.0
+                        thermal_last_notice = now
+                    thermal_hot = True
+                elif thermal_hot and temp_c <= THERMAL_CLEAR_TEMP_C:
+                    thermal_hot = False
+                    thermal_status_text = ""
+                    print(
+                        f"[Thermal] Temperature recovered "
+                        f"({zone_name} {temp_c:.1f} C)."
+                    )
+            elif thermal_hot:
+                thermal_hot = False
+                thermal_status_text = ""
 
         # ───────────── Event pump ─────────────
         for ev in pygame.event.get():
@@ -9638,6 +9715,8 @@ def main():
             vf_.render(inj_label, True, (255, 220, 180)),
             vf_.render(f"Syringe calib: {calibration_status}", True, (200, 230, 200)),
         ]
+        if thermal_status_text:
+            texts.append(vf_.render(thermal_status_text, True, (255, 170, 120)))
         sb_w = max(t.get_width() for t in texts) + 8
         sb_h = sum(t.get_height() + 4 for t in texts) + 4
         x3 = tl_rect.x + tl_w - sb_w - m
