@@ -718,6 +718,70 @@ class RealSenseThread(threading.Thread):
             except Exception:
                 pass
 
+
+class JoystickPollThread(threading.Thread):
+    def __init__(self, joy, state, poll_hz=240.0):
+        super().__init__(daemon=True)
+        self.joy = joy
+        self.state = state
+        self.poll_hz = max(30.0, float(poll_hz))
+        self._stop_event = threading.Event()
+        self._prev_lb = False
+        self._prev_rb = False
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        period = 1.0 / self.poll_hz
+        next_t = time.monotonic()
+        while not self._stop_event.is_set():
+            now = time.monotonic()
+            if now < next_t:
+                time.sleep(next_t - now)
+                now = time.monotonic()
+            next_t = now + period
+
+            try:
+                pygame.event.pump()
+            except Exception:
+                pass
+
+            try:
+                raw_hx, raw_hy = self.joy.get_hat(0)
+            except Exception:
+                raw_hx, raw_hy = 0, 0
+
+            try:
+                lb = bool(self.joy.get_button(4))
+                rb = bool(self.joy.get_button(5))
+            except Exception:
+                lb, rb = False, False
+
+            lx = _axis(self.joy, LS_X_AXIS, INVERT_LS_X)
+            ly = _axis(self.joy, LS_Y_AXIS, INVERT_LS_Y)
+            rx = _axis(self.joy, RS_X_AXIS, INVERT_RS_X)
+            ry = _axis(self.joy, RS_Y_AXIS, INVERT_RS_Y)
+            lt = _axis(self.joy, LEFT_AXIS)
+            rt = _axis(self.joy, RIGHT_AXIS)
+
+            with self.state.lock:
+                self.state.lx, self.state.ly = lx, ly
+                self.state.rx, self.state.ry = rx, ry
+                self.state.hx, self.state.hy = raw_hx, raw_hy
+                self.state.lb, self.state.rb = lb, rb
+                self.state.lt, self.state.rt = lt, rt
+
+                lb_edge = lb and not self._prev_lb
+                rb_edge = rb and not self._prev_rb
+                if lb_edge:
+                    self.state.idx = max(0, self.state.idx - 1)
+                if rb_edge:
+                    self.state.idx = min(len(self.state.levels) - 1, self.state.idx + 1)
+
+            self._prev_lb = lb
+            self._prev_rb = rb
+
 # ─────────────────────────────────────────────────────────────────────────────
 #                 ROBOT + UI + ROUTINE + SYRINGE CALIBRATION
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3707,6 +3771,7 @@ class SharedState:
         self.lx = self.ly = self.rx = self.ry = 0.0
         self.hx = self.hy = 0
         self.lb = self.rb = False
+        self.lt = self.rt = 0.0
 
         # Manual speed scale levels (LB/RB to change)
         self.levels = [0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1.0, 1.5, 2.0, 3.0, 4.0, 5.0]
@@ -7429,6 +7494,8 @@ def main():
         return
     joy = pygame.joystick.Joystick(0)
     joy.init()
+    joystick_thread = JoystickPollThread(joy, state, poll_hz=240.0)
+    joystick_thread.start()
 
     # ─────────────────────────────────────────────────────────────
     # RealSense
@@ -8318,7 +8385,6 @@ def main():
     loop_prev_time = time.time()
 
     prev_a = prev_b = prev_x = prev_y = False
-    prev_lb = prev_rb = False
     last_sig_axis_time = 0.0
     prev_lt = 0.0
     prev_rt = 0.0
@@ -8975,46 +9041,13 @@ def main():
             break
 
         # ───────────── Joystick axes / buttons ─────────────
-        raw_hx, raw_hy = joy.get_hat(0)
-        lb, rb = joy.get_button(4), joy.get_button(5)
-
-        lx = _axis(joy, LS_X_AXIS, INVERT_LS_X)
-        ly = _axis(joy, LS_Y_AXIS, INVERT_LS_Y)
-        rx = _axis(joy, RS_X_AXIS, INVERT_RS_X)
-        ry = _axis(joy, RS_Y_AXIS, INVERT_RS_Y)
-
         with state.lock:
-            state.lx, state.ly = lx, ly
-            state.rx, state.ry = rx, ry
-            state.hx, state.hy = raw_hx, raw_hy
-            state.lb, state.rb = lb, rb
-
-        # Manual speed scale change via LB/RB on press
-        lb_edge = lb and not prev_lb
-        rb_edge = rb and not prev_rb
-        with state.lock:
-            idx = state.idx
-            levels = state.levels[:]
-        if lb_edge:
-            idx = max(0, idx - 1)
-            with state.lock:
-                state.idx = idx
-            try:
-                joy.rumble(0.2, 0.2, 120)
-            except Exception:
-                pass
-        if rb_edge:
-            idx = min(len(levels) - 1, idx + 1)
-            with state.lock:
-                state.idx = idx
-            try:
-                joy.rumble(0.5, 0.5, 140)
-            except Exception:
-                pass
-        prev_lb, prev_rb = lb, rb
-
-        cur_lt = joy.get_axis(LEFT_AXIS)
-        cur_rt = joy.get_axis(RIGHT_AXIS)
+            lx, ly = state.lx, state.ly
+            rx, ry = state.rx, state.ry
+            raw_hx, raw_hy = state.hx, state.hy
+            lb, rb = state.lb, state.rb
+            cur_lt = state.lt
+            cur_rt = state.rt
         if abs(cur_lt - prev_lt) > AXIS_GUARD_DELTA or abs(cur_rt - prev_rt) > AXIS_GUARD_DELTA:
             last_sig_axis_time = time.time()
         prev_lt, prev_rt = cur_lt, cur_rt
@@ -9974,12 +10007,23 @@ def main():
 
         f2_raw = uvc2.latest() if uvc2 else None
         f2 = transform_uvc_frame(f2_raw, u2_rot, u2_hf, u2_vf) if f2_raw is not None else None
-        # BL camera: needle enters from bottom, tip moves upward across frame
-        tip_h_norm = detect_needle_tip(f2, entry_side="bottom") if f2 is not None else None
 
         f1_raw = uvc1.latest() if uvc1 else None
         f1 = transform_uvc_frame(f1_raw, u1_rot, u1_hf, u1_vf) if f1_raw is not None else None
-        tip_v_norm = detect_needle_tip(f1, entry_side="auto") if f1 is not None else None
+
+        need_demo_tip_tracking = bool(tool_center_demo_on)
+        # Needle-tip extraction is relatively expensive and only matters for the
+        # tool-center demo traces. Skip it during normal manual control.
+        tip_h_norm = (
+            detect_needle_tip(f2, entry_side="bottom")
+            if (need_demo_tip_tracking and f2 is not None)
+            else None
+        )
+        tip_v_norm = (
+            detect_needle_tip(f1, entry_side="auto")
+            if (need_demo_tip_tracking and f1 is not None)
+            else None
+        )
 
         pivot_h = pivot_v = None
         pivot_offset_h = pivot_offset_v = None
@@ -11807,6 +11851,11 @@ def main():
     try:
         rt.stop()
         rt.join()
+    except Exception:
+        pass
+    try:
+        joystick_thread.stop()
+        joystick_thread.join()
     except Exception:
         pass
     try:
