@@ -1577,6 +1577,17 @@ def _build_alarm_duration_values(limit: int):
     return vals
 
 
+def _build_alarm_tune_candidates(max_threshold: int, max_duration: int):
+    thresholds = _build_alarm_threshold_values(int(max_threshold))
+    durations = _build_alarm_duration_values(int(max_duration))
+    # Sweep all threshold candidates at the minimum duration first so the
+    # movement phase can start as soon as threshold is high enough, instead of
+    # spending a long time inflating duration before any motion is attempted.
+    for duration in durations:
+        for threshold in thresholds:
+            yield int(threshold), int(duration)
+
+
 def _launcher_test_alarm_pid_candidate(
     robot,
     alarm_latch,
@@ -1684,7 +1695,7 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
     )
     _launcher_tune_log(
         progress_cb,
-        "[HaltTune] Starting from the configured tune floor and increasing slowly until no alarm is met "
+        "[HaltTune] Sweeping threshold first at the minimum duration, then widening duration only if needed "
         f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
         f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)}).",
     )
@@ -1739,21 +1750,21 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
         tuned_duration = None
         found = False
 
-        for threshold_candidate in _build_alarm_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
-            for duration_candidate in _build_alarm_duration_values(int(HALT_TUNE_DURATION_MAX)):
-                if _launcher_test_alarm_pid_candidate(
-                    robot,
-                    alarm_latch,
-                    threshold_candidate,
-                    duration_candidate,
-                    progress_cb=progress_cb,
-                    hold_s=0.75,
-                ):
-                    tuned_threshold = int(threshold_candidate)
-                    tuned_duration = int(duration_candidate)
-                    found = True
-                    break
-            if found:
+        for threshold_candidate, duration_candidate in _build_alarm_tune_candidates(
+            int(DEFAULT_PID_THRESHOLD_MAX),
+            int(HALT_TUNE_DURATION_MAX),
+        ):
+            if _launcher_test_alarm_pid_candidate(
+                robot,
+                alarm_latch,
+                threshold_candidate,
+                duration_candidate,
+                progress_cb=progress_cb,
+                hold_s=0.75,
+            ):
+                tuned_threshold = int(threshold_candidate)
+                tuned_duration = int(duration_candidate)
+                found = True
                 break
 
         if not found or tuned_threshold is None or tuned_duration is None:
@@ -3769,7 +3780,7 @@ class RobotThread(threading.Thread):
             f"Requested starting point threshold={int(requested_threshold)}, duration={int(requested_duration)}."
         )
         print(
-            "[HaltTune] Starting from the configured tune floor and increasing slowly until no alarm is met "
+            "[HaltTune] Sweeping threshold first at the minimum duration, then widening duration only if needed "
             f"(threshold {int(HALT_TUNE_THRESHOLD_MIN)}..{int(DEFAULT_PID_THRESHOLD_MAX)}, "
             f"duration {int(HALT_TUNE_DURATION_MIN)}..{int(HALT_TUNE_DURATION_MAX)})."
         )
@@ -3788,66 +3799,18 @@ class RobotThread(threading.Thread):
         except Exception as e:
             print(f"⚠️ [HaltTune] Could not confirm Default pose before tuning: {e}")
 
-        def build_threshold_values(limit: int):
-            vals = [int(HALT_TUNE_THRESHOLD_MIN)]
-            cur = vals[0]
-            limit = int(limit)
-            while cur < limit:
-                if cur < 10:
-                    step = 1
-                elif cur < 40:
-                    step = 2
-                elif cur < 100:
-                    step = 5
-                elif cur < 200:
-                    step = 10
-                else:
-                    step = 20
-                cur = min(limit, cur + step)
-                if cur != vals[-1]:
-                    vals.append(cur)
-            return vals
-
-        def build_duration_values(limit: int):
-            vals = [int(HALT_TUNE_DURATION_MIN)]
-            cur = vals[0]
-            limit = int(limit)
-            while cur < limit:
-                if cur < 10:
-                    step = 1
-                elif cur < 50:
-                    step = 5
-                elif cur < 100:
-                    step = 10
-                elif cur < 250:
-                    step = 25
-                elif cur < 500:
-                    step = 50
-                elif cur < 1000:
-                    step = 100
-                elif cur < 2500:
-                    step = 250
-                elif cur < 5000:
-                    step = 500
-                else:
-                    step = 1000
-                cur = min(limit, cur + step)
-                if cur != vals[-1]:
-                    vals.append(cur)
-            return vals
-
         tuned_threshold = None
         tuned_duration = None
         found = False
 
-        for threshold_candidate in build_threshold_values(int(DEFAULT_PID_THRESHOLD_MAX)):
-            for duration_candidate in build_duration_values(int(HALT_TUNE_DURATION_MAX)):
-                if self._test_alarm_pid_candidate(threshold_candidate, duration_candidate, hold_s=0.75):
-                    tuned_threshold = int(threshold_candidate)
-                    tuned_duration = int(duration_candidate)
-                    found = True
-                    break
-            if found:
+        for threshold_candidate, duration_candidate in _build_alarm_tune_candidates(
+            int(DEFAULT_PID_THRESHOLD_MAX),
+            int(HALT_TUNE_DURATION_MAX),
+        ):
+            if self._test_alarm_pid_candidate(threshold_candidate, duration_candidate, hold_s=0.75):
+                tuned_threshold = int(threshold_candidate)
+                tuned_duration = int(duration_candidate)
+                found = True
                 break
 
         if not found or tuned_threshold is None or tuned_duration is None:
