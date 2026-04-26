@@ -7533,6 +7533,7 @@ def main():
     if pygame.joystick.get_count() == 0:
         print("❌ No joystick detected.")
         return
+    state = SharedState()
     joy = pygame.joystick.Joystick(0)
     joy.init()
     joystick_thread = JoystickPollThread(joy, state, poll_hz=240.0)
@@ -7664,7 +7665,6 @@ def main():
     # ─────────────────────────────────────────────────────────────
     # Shared state + Robot thread
     # ─────────────────────────────────────────────────────────────
-    state = SharedState()
     with state.lock:
         state.poses["Reload"] = DEFAULT_POSES["Reload"].copy()
         threshold, duration = _clamp_alarm_pid(
