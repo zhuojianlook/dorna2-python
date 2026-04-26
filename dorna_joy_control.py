@@ -45,7 +45,6 @@ DEFAULT_RS_FPS = 30
 THERMAL_WARN_TEMP_C = 95.0
 THERMAL_CLEAR_TEMP_C = 90.0
 THERMAL_POLL_INTERVAL_S = 3.0
-THERMAL_WARNING_REPEAT_S = 30.0
 _V4L2_CTL = shutil.which("v4l2-ctl")
 _V4L2_CAPS_CACHE = {}
 
@@ -7915,7 +7914,8 @@ def main():
     thermal_status_text = ""
     thermal_hot = False
     thermal_last_poll = 0.0
-    thermal_last_notice = 0.0
+    thermal_warning_dismissed = False
+    thermal_warning_dismiss_rect = None
 
     # ─────────────────────────────────────────────────────────────
     # Helper closures local to main()
@@ -8441,6 +8441,7 @@ def main():
         tool_center_radius_rect = None
         alarm_threshold_rect = None
         alarm_duration_rect = None
+        thermal_warning_dismiss_rect = None
         tool_center_demo_mode = getattr(state, "tool_center_demo_mode", "circle")
         now = time.time()
 
@@ -8451,22 +8452,26 @@ def main():
                 temp_c = float(hotspot.get("temp_c", 0.0))
                 zone_name = str(hotspot.get("type", "thermal")).strip() or "thermal"
                 if temp_c >= THERMAL_WARN_TEMP_C:
-                    thermal_status_text = (
-                        f"Thermal warning: {zone_name} {temp_c:.0f} C; "
-                        "control lag may occur"
-                    )
-                    if (not thermal_hot) or ((now - thermal_last_notice) >= THERMAL_WARNING_REPEAT_S):
+                    if not thermal_hot:
+                        thermal_warning_dismissed = False
                         print(
                             f"[Thermal] High temperature detected "
                             f"({zone_name} {temp_c:.1f} C). Control lag may occur."
                         )
-                        ui_notice_text = thermal_status_text
+                        ui_notice_text = (
+                            f"Thermal warning: {zone_name} {temp_c:.0f} C; "
+                            "control lag may occur"
+                        )
                         ui_notice_until = now + 5.0
-                        thermal_last_notice = now
+                    thermal_status_text = (
+                        f"Thermal warning: {zone_name} {temp_c:.0f} C; "
+                        "control lag may occur"
+                    )
                     thermal_hot = True
                 elif thermal_hot and temp_c <= THERMAL_CLEAR_TEMP_C:
                     thermal_hot = False
                     thermal_status_text = ""
+                    thermal_warning_dismissed = False
                     print(
                         f"[Thermal] Temperature recovered "
                         f"({zone_name} {temp_c:.1f} C)."
@@ -8474,6 +8479,7 @@ def main():
             elif thermal_hot:
                 thermal_hot = False
                 thermal_status_text = ""
+                thermal_warning_dismissed = False
 
         # ───────────── Event pump ─────────────
         for ev in pygame.event.get():
@@ -9744,6 +9750,45 @@ def main():
             ui_notice_text = ""
             ui_notice_until = 0.0
 
+        if thermal_hot and thermal_status_text and not thermal_warning_dismissed:
+            pad = 10
+            notice_font = pygame.font.SysFont("Consolas", 16, bold=True)
+            text_surf = notice_font.render(thermal_status_text, True, (255, 210, 170))
+            btn_pad_x = 10
+            btn_pad_y = 6
+            dismiss_surf = notice_font.render("Dismiss", True, (255, 240, 220))
+            btn_w = dismiss_surf.get_width() + btn_pad_x * 2
+            btn_h = dismiss_surf.get_height() + btn_pad_y * 2
+            gap = 12
+            bg_w = text_surf.get_width() + btn_w + gap + pad * 2
+            bg_h = max(text_surf.get_height(), btn_h) + pad * 2
+            bg = pygame.Surface((bg_w, bg_h), pygame.SRCALPHA)
+            bg.fill((70, 20, 20, 220))
+            pygame.draw.rect(bg, (255, 170, 120), bg.get_rect(), 2)
+            text_y = (bg_h - text_surf.get_height()) // 2
+            bg.blit(text_surf, (pad, text_y))
+            btn_x = bg_w - pad - btn_w
+            btn_y = (bg_h - btn_h) // 2
+            btn_rect_local = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
+            pygame.draw.rect(bg, (110, 35, 35), btn_rect_local)
+            pygame.draw.rect(bg, (255, 200, 160), btn_rect_local, 2)
+            bg.blit(
+                dismiss_surf,
+                (
+                    btn_x + (btn_w - dismiss_surf.get_width()) // 2,
+                    btn_y + (btn_h - dismiss_surf.get_height()) // 2,
+                ),
+            )
+            nx = tl_rect.x + (tl_rect.w - bg_w) // 2
+            ny = tl_rect.y + 10
+            screen.blit(bg, (nx, ny))
+            thermal_warning_dismiss_rect = pygame.Rect(
+                nx + btn_rect_local.x,
+                ny + btn_rect_local.y,
+                btn_rect_local.w,
+                btn_rect_local.h,
+            )
+
         # Ammo bar (top-right of RS)
         if syringe_step_ul > 0 and syringe_volume_ul > 0:
             ammo_float = syringe_remaining_ul / syringe_step_ul
@@ -10688,6 +10733,11 @@ def main():
             or tool_preset_menu_active
             or save_mode_modal_active
         )
+
+        if click_pos is not None and thermal_warning_dismiss_rect is not None:
+            if thermal_warning_dismiss_rect.collidepoint(click_pos):
+                thermal_warning_dismissed = True
+                click_pos = None
 
         if click_pos is not None and not modals_open:
             mx, my = click_pos
