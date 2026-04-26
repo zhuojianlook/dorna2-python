@@ -1891,6 +1891,31 @@ def _launcher_test_alarm_pid_candidate(
             f"after testing {int(threshold)}/{int(duration)}",
             progress_cb=progress_cb,
         )
+        try:
+            _launcher_prepare_relaxed_alarm_pid(robot, alarm_latch)
+            _launcher_clear_alarm_latch(
+                robot,
+                alarm_latch,
+                "before returning to Default after failed test",
+                progress_cb=progress_cb,
+            )
+            robot.set_motor(1)
+            go = {"cmd": "jmove", "rel": 0, "vel": 10.0}
+            go.update(default_pose)
+            _launcher_tune_log(progress_cb, "[HaltTune] Returning to Default after failed candidate test.")
+            robot.play_dict(go)
+            _launcher_wait_for_joint_settle(
+                robot,
+                progress_cb=progress_cb,
+                max_wait_s=8.0,
+                stable_for_s=0.35,
+                tol_deg=0.05,
+            )
+        except Exception as e:
+            _launcher_tune_log(
+                progress_cb,
+                f"⚠️ [HaltTune] Could not return to Default after failed candidate: {e}",
+            )
     return stable
 
 
@@ -4090,6 +4115,20 @@ class RobotThread(threading.Thread):
             if alarm_msg:
                 print(f"[HaltTune] Alarm during test: {alarm_msg}")
             self._clear_alarm_latch(f"after testing {int(threshold)}/{int(duration)}")
+            try:
+                self._prepare_relaxed_alarm_pid()
+                self._clear_alarm_latch("before returning to Default after failed test")
+                self.robot.set_motor(1)
+                print("[HaltTune] Returning to Default after failed candidate test.")
+                if self._queue_jmove_to_pose(default_pose):
+                    self._set_current_named("Default")
+                    self._wait_for_joint_settle(
+                        max_wait_s=8.0,
+                        stable_for_s=0.35,
+                        tol_deg=0.05,
+                    )
+            except Exception as e:
+                print(f"⚠️ [HaltTune] Could not return to Default after failed candidate: {e}")
         return stable
 
     def _auto_tune_alarm_pid(self, threshold: float, duration: float, persist: bool = True):
