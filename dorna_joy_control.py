@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 import math
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
 import numpy as np
 import pygame.surfarray

@@ -36,6 +36,27 @@ class WS(object):
         self._emergency = {"enable": False, "key": "in0", "value":1}
         self._emergency_flag = False
 
+    def _decode_json_payload(self, data):
+        try:
+            if isinstance(data, bytes):
+                text = data.decode("utf-8", errors="ignore")
+            else:
+                text = str(data)
+        except Exception:
+            return None
+
+        index_start = text.find("{")
+        index_end = text.rfind("}")
+        if index_start < 0 or index_end < index_start:
+            return None
+
+        payload = text[index_start:index_end + 1]
+        try:
+            msg, _ = json.JSONDecoder().raw_decode(payload)
+            return msg
+        except json.JSONDecodeError:
+            return None
+
     """
     server 
     """
@@ -163,18 +184,13 @@ class WS(object):
                     # raw data
                     try:
                         data_byte = await self.reader.readuntil(separator=b'}')
-                        data_str = str(data_byte)
                     except Exception as ex:
                         # close connection
                         break
 
-                    # find the index
-                    index_start = data_str.find("{")
-                    if index_start < 0:
+                    msg = self._decode_json_payload(data_byte)
+                    if msg is None:
                         continue
-
-                    # get the message
-                    msg = json.loads(data_str[index_start:-1])
                     
                 else:
                     try:
@@ -187,8 +203,11 @@ class WS(object):
                         break
                        
                     # get the message
-                    msg = json.loads(data_byte.decode("utf-8"))                    
-                
+                    try:
+                        msg = json.loads(data_byte.decode("utf-8"))
+                    except json.JSONDecodeError:
+                        continue
+
                 # message queue
                 if not self.msg.full():
                     self.msg.put(msg)
@@ -402,4 +421,3 @@ class WS(object):
                 # Handle the timeout error here
                 return False
         return True
-
