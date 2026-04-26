@@ -15,13 +15,15 @@ import math
 import pygame
 import numpy as np
 import pygame.surfarray
+os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 import cv2
-# Quiet down OpenCV warnings (keep errors)
+# Quiet down OpenCV warnings from the V4L2 backend. This build exposes the
+# global logging API directly on cv2 rather than cv2.utils.logging.
 try:
-    cv2.utils.logging.setLogLevel(cv2.utils.logging.LOG_LEVEL_ERROR)
+    cv2.setLogLevel(0)
 except Exception:
     try:
-        cv2.utils.logging.setLogLevel(2)  # Fallback: ERROR
+        cv2.setLogLevel(1)
     except Exception:
         pass
 
