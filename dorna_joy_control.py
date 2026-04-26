@@ -1932,6 +1932,8 @@ def show_startup_launcher(args):
     root = tk.Tk()
     root.title("Dorna Joy Control Launcher")
     root.resizable(False, False)
+    poll_after_id = {"id": None}
+    close_requested = {"value": False}
 
     host_var = tk.StringVar(value=str(args.host or DEFAULT_DORNA_HOST))
     port_var = tk.StringVar(value=str(args.port or DEFAULT_DORNA_PORT))
@@ -1977,6 +1979,26 @@ def show_startup_launcher(args):
     option_paths = [""]
     tune_queue = queue.Queue()
     tune_state = {"running": False}
+    launcher_vars = [
+        host_var,
+        port_var,
+        uvc1_var,
+        uvc2_var,
+        uvc_quality_var,
+        rs_quality_var,
+        try_index1_var,
+        fullscreen_var,
+        clear_alarm_var,
+        apply_halt_settings_var,
+        auto_tune_halt_var,
+        alarm_threshold_var,
+        alarm_duration_var,
+        halt_preset_var,
+        launcher_var,
+        status_var,
+        alarm_status_var,
+        tune_status_var,
+    ]
 
     frame = ttk.Frame(root, padding=14)
     frame.grid(row=0, column=0, sticky="nsew")
@@ -2264,7 +2286,17 @@ def show_startup_launcher(args):
         args.alarm_duration = config["alarm_duration"]
         args.launcher = config["launcher"]
         result["ok"] = True
-        root.destroy()
+        close_requested["value"] = True
+        try:
+            if poll_after_id["id"] is not None:
+                root.after_cancel(poll_after_id["id"])
+        except Exception:
+            pass
+        poll_after_id["id"] = None
+        try:
+            root.quit()
+        except Exception:
+            pass
 
     def begin_auto_tune(start_after: bool):
         if tune_state["running"]:
@@ -2313,7 +2345,17 @@ def show_startup_launcher(args):
         if tune_state["running"]:
             tune_status_var.set("Launcher auto-tune is still running. Wait for it to finish.")
             return
-        root.destroy()
+        close_requested["value"] = True
+        try:
+            if poll_after_id["id"] is not None:
+                root.after_cancel(poll_after_id["id"])
+        except Exception:
+            pass
+        poll_after_id["id"] = None
+        try:
+            root.quit()
+        except Exception:
+            pass
 
     def start():
         config = collect_launch_settings()
@@ -2371,7 +2413,55 @@ def show_startup_launcher(args):
         except queue.Empty:
             pass
         try:
-            root.after(100, poll_tune_queue)
+            if not close_requested["value"]:
+                poll_after_id["id"] = root.after(100, poll_tune_queue)
+        except Exception:
+            pass
+
+    def cleanup_launcher():
+        close_requested["value"] = True
+        try:
+            if poll_after_id["id"] is not None:
+                root.after_cancel(poll_after_id["id"])
+        except Exception:
+            pass
+        poll_after_id["id"] = None
+
+        # Unset Tk variables on the main thread so their destructors do not try
+        # to talk to Tcl later from an arbitrary worker-thread shutdown path.
+        for var in launcher_vars:
+            try:
+                tk_app = getattr(var, "_tk", None)
+                name = getattr(var, "_name", None)
+                if tk_app is not None and name and tk_app.getboolean(tk_app.call("info", "exists", name)):
+                    tk_app.globalunsetvar(name)
+            except Exception:
+                pass
+            try:
+                tk_app = getattr(var, "_tk", None)
+                tcl_cmds = getattr(var, "_tclCommands", None) or []
+                for cmd_name in tcl_cmds:
+                    try:
+                        tk_app.deletecommand(cmd_name)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            try:
+                var._tclCommands = None
+            except Exception:
+                pass
+            try:
+                var._tk = None
+            except Exception:
+                pass
+
+        try:
+            root.update_idletasks()
+        except Exception:
+            pass
+        try:
+            root.destroy()
         except Exception:
             pass
 
@@ -2389,10 +2479,11 @@ def show_startup_launcher(args):
     threshold_scale.configure(command=lambda _v: refresh_alarm_status())
     duration_scale.configure(command=lambda _v: refresh_alarm_status())
     halt_preset_combo.bind("<<ComboboxSelected>>", apply_halt_preset)
-    root.after(100, poll_tune_queue)
+    poll_after_id["id"] = root.after(100, poll_tune_queue)
     host_entry.focus_set()
     root.protocol("WM_DELETE_WINDOW", cancel)
     root.mainloop()
+    cleanup_launcher()
 
     if result["ok"]:
         return args
