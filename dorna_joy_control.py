@@ -776,6 +776,7 @@ DEFAULT_PID_DURATION_MAX = 20000.0
 HALT_TUNE_THRESHOLD_MIN = 20.0
 HALT_TUNE_DURATION_MIN = 20.0
 HALT_TUNE_DURATION_MAX = 1000.0
+HALT_TUNE_BASELINE_DURATION_MAX = 10000.0
 HALT_TUNE_MOVE_MM = 50.0
 HALT_TUNE_MOVE_VEL = 10.0
 HALT_TUNE_HOLD_S = 0.75
@@ -1594,12 +1595,16 @@ def _run_alarm_tune_backoff_search(
     log_func,
     max_threshold: int,
     max_duration: int,
+    baseline_max_duration: int = None,
 ):
     max_threshold = int(max_threshold)
     max_duration = int(max_duration)
+    if baseline_max_duration is None:
+        baseline_max_duration = max_duration
+    baseline_max_duration = int(max(max_duration, baseline_max_duration))
     start_threshold, start_duration = _clamp_alarm_pid(start_threshold, start_duration)
     start_threshold = max(1, min(max_threshold, int(start_threshold)))
-    start_duration = max(1, min(max_duration, int(start_duration)))
+    start_duration = max(1, min(baseline_max_duration, int(start_duration)))
 
     threshold_values, start_threshold = _alarm_tune_ladder(
         _build_alarm_threshold_values,
@@ -1608,7 +1613,7 @@ def _run_alarm_tune_backoff_search(
     )
     duration_values, start_duration = _alarm_tune_ladder(
         _build_alarm_duration_values,
-        max_duration,
+        baseline_max_duration,
         start_duration,
     )
 
@@ -1629,6 +1634,11 @@ def _run_alarm_tune_backoff_search(
         log(
             "[HaltTune] Starting pair was not stable; increasing threshold/duration until a stable baseline is found."
         )
+        if baseline_max_duration > max_duration:
+            log(
+                f"[HaltTune] Widening baseline duration search up to {int(baseline_max_duration)} "
+                "so movement testing can proceed from a stable pair."
+            )
         found = False
         asc_thresholds = [v for v in threshold_values if v >= baseline_threshold]
         asc_durations = [v for v in duration_values if v >= baseline_duration]
@@ -1872,6 +1882,7 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
             lambda msg: _launcher_tune_log(progress_cb, msg),
             int(DEFAULT_PID_THRESHOLD_MAX),
             int(HALT_TUNE_DURATION_MAX),
+            baseline_max_duration=int(HALT_TUNE_BASELINE_DURATION_MAX),
         )
 
         if tuned_pair is None:
@@ -3918,6 +3929,7 @@ class RobotThread(threading.Thread):
             lambda msg: print(msg),
             int(DEFAULT_PID_THRESHOLD_MAX),
             int(HALT_TUNE_DURATION_MAX),
+            baseline_max_duration=int(HALT_TUNE_BASELINE_DURATION_MAX),
         )
 
         if tuned_pair is None:
