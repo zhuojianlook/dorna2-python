@@ -62,7 +62,7 @@ RS_QUALITY_PRESETS = [
 ]
 
 HALT_PID_PRESETS = [
-    ("Default start (40 / 100)", (40, 100)),
+    ("Default start (20 / 20)", (20, 20)),
     ("Stock (200 / 10000)", (200, 10000)),
     ("Mild (180 / 7000)", (180, 7000)),
     ("Moderate (160 / 5000)", (160, 5000)),
@@ -767,14 +767,14 @@ DEFAULT_TOOL_CENTER_RADIUS = 10.0
 DEFAULT_ALARM_SENSITIVITY  = 1.0
 DEFAULT_PID_THRESHOLD_MAIN = 200.0
 DEFAULT_PID_DURATION_MAIN = 10000.0
-DEFAULT_STARTUP_ALARM_THRESHOLD = 40.0
-DEFAULT_STARTUP_ALARM_DURATION = 100.0
+DEFAULT_STARTUP_ALARM_THRESHOLD = 20.0
+DEFAULT_STARTUP_ALARM_DURATION = 20.0
 DEFAULT_PID_THRESHOLD_MIN = 1.0
 DEFAULT_PID_THRESHOLD_MAX = 400.0
 DEFAULT_PID_DURATION_MIN = 1.0
 DEFAULT_PID_DURATION_MAX = 20000.0
-HALT_TUNE_THRESHOLD_MIN = 40.0
-HALT_TUNE_DURATION_MIN = 100.0
+HALT_TUNE_THRESHOLD_MIN = 20.0
+HALT_TUNE_DURATION_MIN = 20.0
 HALT_TUNE_DURATION_MAX = 1000.0
 HALT_TUNE_MOVE_MM = 50.0
 HALT_TUNE_MOVE_VEL = 10.0
@@ -1769,14 +1769,13 @@ def run_launcher_halt_autotune(host: str, port: int, threshold: float, duration:
         return tuned_threshold, tuned_duration
     finally:
         try:
-            robot.set_motor(0)
-        except Exception:
-            pass
-        try:
             robot.close()
         except Exception:
             pass
-        _launcher_tune_log(progress_cb, "[HaltTune] Launcher auto-tune worker disconnected from the robot.")
+        _launcher_tune_log(
+            progress_cb,
+            "[HaltTune] Launcher auto-tune worker disconnected from the robot without disabling motors.",
+        )
 
 def show_startup_launcher(args):
     if not os.environ.get("DISPLAY") and sys.platform not in ("win32", "darwin"):
