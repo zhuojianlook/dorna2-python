@@ -454,9 +454,6 @@ class UvcThread(threading.Thread):
         self._frame = None
         self._opened = False
         self._status = "Initializing…"
-        self._open_timeout_msec = 2000
-        self._read_timeout_msec = max(250, min(2000, int(round(3000 / max(1, self.fps)))))
-        self._slow_read_reopen_s = max(0.5, self._read_timeout_msec / 1000.0)
 
     def _decode_fourcc(self, v):
         try:
@@ -474,17 +471,6 @@ class UvcThread(threading.Thread):
         cap = cv2.VideoCapture(dev_arg, api)
         if not cap.isOpened():
             return None, None
-
-        for prop, value in (
-            (getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None), self._open_timeout_msec),
-            (getattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC", None), self._read_timeout_msec),
-        ):
-            if prop is None:
-                continue
-            try:
-                cap.set(prop, int(value))
-            except Exception:
-                pass
 
         if fourcc:
             cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
@@ -574,25 +560,19 @@ class UvcThread(threading.Thread):
 
             idle_sleep = 0.001
             fail_count = 0
-            max_fail_before_reopen = 2
+            max_fail_before_reopen = 300   # ~0.3s at 1 kHz loop
 
             while not self._stop_event.is_set():
-                read_started = time.monotonic()
                 ok, frame = cap.read()
-                read_dt = time.monotonic() - read_started
                 if not ok or frame is None:
                     fail_count += 1
-                    stalled = read_dt >= self._slow_read_reopen_s
-                    if fail_count >= max_fail_before_reopen or stalled:
+                    if fail_count >= max_fail_before_reopen:
                         try:
                             cap.release()
                         except Exception:
                             pass
                         cap = None
-                        if stalled:
-                            self._status = f"{self.name}: capture stalled for {read_dt:.1f}s, reopening…"
-                        else:
-                            self._status = f"{self.name}: lost frames, reopening…"
+                        self._status = f"{self.name}: lost frames, reopening…"
                         time.sleep(0.2)
                         reopen_paths = [chosen_path] + [p for p in paths_to_try if p != chosen_path]
                         for retry_path in reopen_paths:
