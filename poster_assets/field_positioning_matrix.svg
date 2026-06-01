@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560">
+<rect width="1120" height="560" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 11. Field positioning and contribution boundary</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">The contribution is a supervised, reconfigurable experimental workstation rather than a fully autonomous high-throughput batch injector.</text>
+<text x="372.5" y="50.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Manual</text>
+<text x="372.5" y="66.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">micromanipulation</text>
+<text x="557.5" y="50.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">High-throughput</text>
+<text x="557.5" y="66.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">autonomous batch</text>
+<text x="742.5" y="50.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">This</text>
+<text x="742.5" y="66.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">platform</text>
+<text x="927.5" y="50.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Next</text>
+<text x="927.5" y="66.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">validation</text>
+<text x="266.0" y="117.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Operator-in-the-loop visual judgement</text>
+<rect x="289" y="93" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="372.5" y="117.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="474" y="93" width="167" height="36" rx="4" fill="#cbd5e1" opacity="0.88"/>
+<text x="557.5" y="117.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Low</text>
+<rect x="659" y="93" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="742.5" y="117.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="844" y="93" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="927.5" y="117.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<text x="266.0" y="167.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Programmable pose/routine execution</text>
+<rect x="289" y="143" width="167" height="36" rx="4" fill="#cbd5e1" opacity="0.88"/>
+<text x="372.5" y="167.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Low</text>
+<rect x="474" y="143" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="557.5" y="167.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="659" y="143" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="742.5" y="167.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="844" y="143" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="927.5" y="167.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<text x="266.0" y="217.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Reconfigurable arbitrary sample workflow</text>
+<rect x="289" y="193" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="372.5" y="217.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="474" y="193" width="167" height="36" rx="4" fill="#f2a900" opacity="0.88"/>
+<text x="557.5" y="217.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Med.</text>
+<rect x="659" y="193" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="742.5" y="217.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="844" y="193" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="927.5" y="217.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<text x="266.0" y="267.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Synchronized telemetry/video evidence</text>
+<rect x="289" y="243" width="167" height="36" rx="4" fill="#cbd5e1" opacity="0.88"/>
+<text x="372.5" y="267.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Low</text>
+<rect x="474" y="243" width="167" height="36" rx="4" fill="#f2a900" opacity="0.88"/>
+<text x="557.5" y="267.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Med.</text>
+<rect x="659" y="243" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="742.5" y="267.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="844" y="243" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="927.5" y="267.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<text x="266.0" y="317.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Volume-calibrated fluid actuation</text>
+<rect x="289" y="293" width="167" height="36" rx="4" fill="#f2a900" opacity="0.88"/>
+<text x="372.5" y="317.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Med.</text>
+<rect x="474" y="293" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="557.5" y="317.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="659" y="293" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="742.5" y="317.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="844" y="293" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="927.5" y="317.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<text x="266.0" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Closed-loop visual servoing to biological target</text>
+<rect x="289" y="343" width="167" height="36" rx="4" fill="#cbd5e1" opacity="0.88"/>
+<text x="372.5" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">Low</text>
+<rect x="474" y="343" width="167" height="36" rx="4" fill="#219653" opacity="0.88"/>
+<text x="557.5" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">High</text>
+<rect x="659" y="343" width="167" height="36" rx="4" fill="#f2a900" opacity="0.88"/>
+<text x="742.5" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Partial</text>
+<rect x="844" y="343" width="167" height="36" rx="4" fill="#22a6b3" opacity="0.88"/>
+<text x="927.5" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Target</text>
+<text x="266.0" y="417.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Force/tactile puncture confirmation</text>
+<rect x="289" y="393" width="167" height="36" rx="4" fill="#2f80ed" opacity="0.88"/>
+<text x="372.5" y="417.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Human</text>
+<rect x="474" y="393" width="167" height="36" rx="4" fill="#7b61ff" opacity="0.88"/>
+<text x="557.5" y="417.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Emerging</text>
+<rect x="659" y="393" width="167" height="36" rx="4" fill="#d64545" opacity="0.88"/>
+<text x="742.5" y="417.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">None</text>
+<rect x="844" y="393" width="167" height="36" rx="4" fill="#22a6b3" opacity="0.88"/>
+<text x="927.5" y="417.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#ffffff" text-anchor="middle" font-weight="700">Target</text>
+<text x="28.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Interpretation: high-throughput systems optimize autonomy and throughput; this platform optimizes protocol development, traceability, and supervised microscope-guided operation.</text>
+</svg>

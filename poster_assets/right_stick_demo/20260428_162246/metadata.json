@@ -1,0 +1,42 @@
+{
+  "created": "20260428_162246",
+  "csv": "/home/zhuojian/dorna2-python-experimental/poster_assets/right_stick_demo/20260428_162246/right_stick_tcp_demo.csv",
+  "host": "10.42.0.11",
+  "port": 443,
+  "sample_hz": 40.0,
+  "move_vel": 8.0,
+  "tilt_deg": 10.0,
+  "alarm_threshold": 30,
+  "alarm_duration": 50,
+  "rows": 1,
+  "base_joint_deg": [
+    54.755859,
+    4.020996,
+    -119.223633,
+    65.236816,
+    97.712402,
+    13.337402
+  ],
+  "base_tcp_xyzabc": [
+    233.9350178188592,
+    221.89143726197324,
+    48.375055768453855,
+    122.07442841058132,
+    -0.12304061485748634,
+    113.91231510103584
+  ],
+  "segments": [
+    {
+      "segment": "baseline_fixed_tcp",
+      "command": "center",
+      "rows": 1,
+      "max_joint_delta_norm_deg": 0.0310731003924665,
+      "max_tcp_drift_norm_mm": 0.042130726102643144
+    }
+  ],
+  "settings_subset": {
+    "tool_lz": 30.0,
+    "tool_cx": 0.0,
+    "tool_cy": 0.0
+  }
+}

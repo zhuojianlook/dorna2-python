@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="650" viewBox="0 0 1080 650">
+<rect width="1080" height="650" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 20. Xbox-to-Arduino syringe control stack</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Controller triggers are converted into guarded serial velocity commands and calibrated volume accounting.</text>
+<defs><marker id="arrow5" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#1f2933"/></marker></defs>
+<rect x="34" y="88" width="170" height="118" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="46.0" y="110.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#219653" text-anchor="start" font-weight="700">Xbox controller</text>
+<text x="46.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">pygame joystick 0</text>
+<text x="46.0" y="149.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">LT axis 2, RT axis 5</text>
+<text x="46.0" y="164.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">A/B/X/Y = 0/1/2/3</text>
+<text x="46.0" y="179.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">poll thread: 240 Hz</text>
+<rect x="246" y="88" width="170" height="118" rx="5" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="258.0" y="110.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#2f80ed" text-anchor="start" font-weight="700">Input conditioning</text>
+<text x="258.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">deadzone = 0.02</text>
+<text x="258.0" y="149.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">trigger normalize u in [0,1]</text>
+<text x="258.0" y="164.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">A/B/X/Y edge detection</text>
+<text x="258.0" y="179.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">axis guard delta = 0.20</text>
+<rect x="458" y="88" width="170" height="118" rx="5" fill="#f8fafc" stroke="#7b61ff" stroke-width="2"/>
+<text x="470.0" y="110.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#7b61ff" text-anchor="start" font-weight="700">Supervisory gates</text>
+<text x="470.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">block while at __midway</text>
+<text x="470.0" y="149.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">block before pose settles</text>
+<text x="470.0" y="164.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">block during calibration</text>
+<text x="470.0" y="179.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">branch: manual vs injection</text>
+<rect x="670" y="88" width="170" height="118" rx="5" fill="#f8fafc" stroke="#f2a900" stroke-width="2"/>
+<text x="682.0" y="110.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#f2a900" text-anchor="start" font-weight="700">Command synthesis</text>
+<text x="682.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">manual: LT -&gt; +V</text>
+<text x="682.0" y="149.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">manual: RT -&gt; -V</text>
+<text x="682.0" y="164.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">injection: RT drives dose</text>
+<text x="682.0" y="179.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">release/complete -&gt; V0</text>
+<rect x="882" y="88" width="170" height="118" rx="5" fill="#f8fafc" stroke="#d64545" stroke-width="2"/>
+<text x="894.0" y="110.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#d64545" text-anchor="start" font-weight="700">Arduino bridge</text>
+<text x="894.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">pyserial 115200 baud</text>
+<text x="894.0" y="149.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">ASCII: V&lt;rate&gt;</text>
+<text x="894.0" y="164.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">E queries endstops</text>
+<text x="894.0" y="179.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">R resets controller</text>
+<line x1="212.0" y1="147.0" x2="236.0" y2="147.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<line x1="424.0" y1="147.0" x2="448.0" y2="147.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<line x1="636.0" y1="147.0" x2="660.0" y2="147.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<line x1="848.0" y1="147.0" x2="872.0" y2="147.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<text x="72.0" y="243.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#1f2933" text-anchor="start" font-weight="700">Proportional velocity map</text>
+<rect x="72" y="265" width="410" height="230" fill="#fbfdff" stroke="#d9e2ec"/>
+<line x1="72.0" y1="265" x2="72.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="265.0" x2="482" y2="265.0" stroke="#d9e2ec"/>
+<text x="72.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">0.0</text>
+<text x="64.0" y="269.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">1600</text>
+<line x1="154.0" y1="265" x2="154.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="311.0" x2="482" y2="311.0" stroke="#d9e2ec"/>
+<text x="154.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">0.2</text>
+<text x="64.0" y="315.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">960</text>
+<line x1="236.0" y1="265" x2="236.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="357.0" x2="482" y2="357.0" stroke="#d9e2ec"/>
+<text x="236.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">0.4</text>
+<text x="64.0" y="361.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">320</text>
+<line x1="318.0" y1="265" x2="318.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="403.0" x2="482" y2="403.0" stroke="#d9e2ec"/>
+<text x="318.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">0.6</text>
+<text x="64.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">-320</text>
+<line x1="400.0" y1="265" x2="400.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="449.0" x2="482" y2="449.0" stroke="#d9e2ec"/>
+<text x="400.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">0.8</text>
+<text x="64.0" y="453.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">-960</text>
+<line x1="482.0" y1="265" x2="482.0" y2="495" stroke="#d9e2ec"/>
+<line x1="72" y1="495.0" x2="482" y2="495.0" stroke="#d9e2ec"/>
+<text x="482.0" y="513.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">1.0</text>
+<text x="64.0" y="499.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">-1600</text>
+<line x1="72" y1="380.0" x2="482" y2="380.0" stroke="#1f2933" stroke-width="1.4"/>
+<polyline points="72.0,380.0 482.0,265.0" fill="none" stroke="#219653" stroke-width="3"/>
+<polyline points="72.0,380.0 482.0,495.0" fill="none" stroke="#d64545" stroke-width="3"/>
+<polyline points="72.0,380.0 482.0,495.0" fill="none" stroke="#7b61ff" stroke-width="2.4" stroke-dasharray="6 5"/>
+<line x1="80.2" y1="265" x2="80.2" y2="495" stroke="#f2a900" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="84.2" y="279.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#f2a900" text-anchor="start" font-weight="700">deadzone</text>
+<text x="277.0" y="535.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">trigger command u</text>
+<text x="30.0" y="380.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">serial rate</text>
+<text x="90.0" y="285.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#219653" text-anchor="start" font-weight="700">LT manual reverse/prime</text>
+<text x="90.0" y="303.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#d64545" text-anchor="start" font-weight="700">RT manual/inject expel</text>
+<text x="90.0" y="321.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#7b61ff" text-anchor="start" font-weight="700">injection uses configured FWD rate</text>
+<rect x="530" y="252" width="500" height="255" rx="5" fill="#ffffff" stroke="#d9e2ec"/>
+<text x="548.0" y="282.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#1f2933" text-anchor="start" font-weight="700">Calibrated dose integrator</text>
+<text x="548.0" y="310.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">s_step = s_full * Q_step / Q_full = 2208.1 units</text>
+<text x="548.0" y="332.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">s_k = s_(k-1) + |V_cmd| * dt</text>
+<text x="548.0" y="354.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">stop when s_k &gt;= s_step, then write V0</text>
+<text x="548.0" y="376.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">current step = 1 uL, nominal time = 1.380 s</text>
+<text x="558.0" y="404.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="700">full calibrated syringe stroke</text>
+<rect x="558" y="416" width="300" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="558" y="416" width="30.0" height="28" fill="#2f80ed" opacity="0.9"/>
+<text x="596.0" y="436.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#2f80ed" text-anchor="start" font-weight="700">10.0% per step</text>
+<text x="558.0" y="466.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="start" font-weight="400">0 units</text>
+<text x="858.0" y="466.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="end" font-weight="400">22081 units</text>
+<rect x="880" y="310" width="128" height="34" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="888.0" y="324.0" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#52616b" text-anchor="start" font-weight="700">Manual max</text>
+<text x="888.0" y="339.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="start" font-weight="700">+/-1600 units/s</text>
+<rect x="880" y="353" width="128" height="34" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="888.0" y="367.0" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#52616b" text-anchor="start" font-weight="700">FWD/BWD cfg</text>
+<text x="888.0" y="382.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="start" font-weight="700">1600/1600 units/s</text>
+<rect x="880" y="396" width="128" height="34" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="888.0" y="410.0" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#52616b" text-anchor="start" font-weight="700">Endstop timeout</text>
+<text x="888.0" y="425.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="start" font-weight="700">operator-monitored</text>
+<rect x="880" y="439" width="128" height="34" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="888.0" y="453.0" font-family="Arial, Helvetica, sans-serif" font-size="9" fill="#52616b" text-anchor="start" font-weight="700">Final expel</text>
+<text x="888.0" y="468.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="start" font-weight="700">BWD</text>
+<text x="70.0" y="525.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#1f2933" text-anchor="start" font-weight="700">Serial protocol and feedback parser</text>
+<rect x="70" y="547" width="230" height="72" rx="5" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="82.0" y="569.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#2f80ed" text-anchor="start" font-weight="700">Python host</text>
+<text x="82.0" y="593.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">writes V&lt;rate&gt;, V0, E, R</text>
+<text x="82.0" y="608.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">keeps last_rate to avoid repeats</text>
+<rect x="430" y="547" width="230" height="72" rx="5" fill="#f8fafc" stroke="#f2a900" stroke-width="2"/>
+<text x="442.0" y="569.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#f2a900" text-anchor="start" font-weight="700">Arduino firmware</text>
+<text x="442.0" y="593.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">velocity command execution</text>
+<text x="442.0" y="608.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">endstop status returned as text</text>
+<rect x="790" y="547" width="230" height="72" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="802.0" y="569.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#219653" text-anchor="start" font-weight="700">Parser / safety stop</text>
+<text x="802.0" y="593.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">ACT L/R, EL/ER, keywords</text>
+<text x="802.0" y="608.0" font-family="Arial, Helvetica, sans-serif" font-size="10.5" fill="#1f2933" text-anchor="start" font-weight="400">routine/calibration end at V0</text>
+<line x1="308.0" y1="575.0" x2="420.0" y2="575.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<line x1="668.0" y1="575.0" x2="780.0" y2="575.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow5)"/>
+<text x="342.0" y="563.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">ASCII @ 115200</text>
+<text x="700.0" y="563.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">E responses</text>
+<text x="540.0" y="636.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="700">The Arduino is not given a volume command directly; the host closes the calibrated dose step by integrating commanded actuator travel and issuing V0.</text>
+</svg>

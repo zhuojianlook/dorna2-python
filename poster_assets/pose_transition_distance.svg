@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="440" viewBox="0 0 980 440">
+<rect width="980" height="440" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 2. Staged transition burden from Default</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Bars show joint-space reconfiguration load; labels report max single-axis move and midpoint availability.</text>
+<text x="194.0" y="93.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Default</text>
+<rect x="210" y="72" width="0.0" height="30" fill="#219653"/>
+<text x="218.0" y="93.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">0.0 deg norm | max axis 0.0 deg | direct</text>
+<text x="194.0" y="141.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Reload</text>
+<rect x="210" y="120" width="458.2" height="30" fill="#2f80ed"/>
+<text x="676.2" y="141.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">194.6 deg norm | max axis 168.4 deg | midpoint</text>
+<text x="194.0" y="189.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Injector Pose</text>
+<rect x="210" y="168" width="26.4" height="30" fill="#2f80ed"/>
+<text x="244.4" y="189.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">11.2 deg norm | max axis 8.1 deg | midpoint</text>
+<text x="194.0" y="237.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Safe Pose</text>
+<rect x="210" y="216" width="169.1" height="30" fill="#2f80ed"/>
+<text x="387.1" y="237.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">71.8 deg norm | max axis 46.2 deg | midpoint</text>
+<text x="194.0" y="285.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Wash1</text>
+<rect x="210" y="264" width="490.0" height="30" fill="#2f80ed"/>
+<text x="708.0" y="285.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">208.2 deg norm | max axis 177.8 deg | midpoint</text>
+<text x="194.0" y="333.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Wash2</text>
+<rect x="210" y="312" width="485.3" height="30" fill="#2f80ed"/>
+<text x="703.3" y="333.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">206.2 deg norm | max axis 178.8 deg | midpoint</text>
+<text x="194.0" y="381.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Calibration</text>
+<rect x="210" y="360" width="21.0" height="30" fill="#2f80ed"/>
+<text x="239.0" y="381.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="400">8.9 deg norm | max axis 5.3 deg | midpoint</text>
+<line x1="210" y1="420" x2="700" y2="420" stroke="#d9e2ec"/>
+<text x="210.0" y="442.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="middle" font-weight="400">0</text>
+<text x="700.0" y="442.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="middle" font-weight="400">208 deg</text>
+</svg>

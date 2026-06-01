@@ -1,0 +1,2 @@
+t,segment,target,sample,alarm,j0,j1,j2,j3,j4,j5,x,y,z,a,b,c,q_speed_norm_deg_s,tcp_speed_norm_mm_s,sigma_min,sigma_max,condition,manip_6d,manip_trans
+2.57492065e-05,baseline_default,Default,0,1,48.032227,3.22998,-121.948242,59.699707,102.019043,6.899414,244.202109,194.078129,47.8936222,118.403099,8.20991893,109.196871,,,,,,,

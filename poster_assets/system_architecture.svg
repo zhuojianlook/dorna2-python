@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="500" viewBox="0 0 980 500">
+<rect width="980" height="500" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 3. Control and acquisition timing budget</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Thread and command rates define what the supervised controller can react to and record.</text>
+<text x="212.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Joystick sampling</text>
+<rect x="230" y="96" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="96" width="560.0" height="28" fill="#219653" opacity="0.86"/>
+<text x="804.0" y="116.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">240 Hz (4.2 ms)</text>
+<text x="804.0" y="134.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">input thread</text>
+<text x="212.0" y="173.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Robot control loop</text>
+<rect x="230" y="150" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="150" width="280.0" height="28" fill="#2f80ed" opacity="0.86"/>
+<text x="804.0" y="170.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">120 Hz (8.3 ms)</text>
+<text x="804.0" y="188.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">state/update loop</text>
+<text x="212.0" y="227.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">Tool-axis jog stream</text>
+<rect x="230" y="204" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="204" width="186.7" height="28" fill="#7b61ff" opacity="0.86"/>
+<text x="804.0" y="224.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">80 Hz (12.5 ms)</text>
+<text x="804.0" y="242.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">local TCP insertion</text>
+<text x="212.0" y="281.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">General TCP jog stream</text>
+<rect x="230" y="258" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="258" width="93.3" height="28" fill="#22a6b3" opacity="0.86"/>
+<text x="804.0" y="278.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">40 Hz (25.0 ms)</text>
+<text x="804.0" y="296.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">lmove rate limit</text>
+<text x="212.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">UVC microscope streams</text>
+<rect x="230" y="312" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="312" width="70.0" height="28" fill="#f2a900" opacity="0.86"/>
+<text x="804.0" y="332.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">30 Hz (33.3 ms)</text>
+<text x="804.0" y="350.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">640x480</text>
+<text x="212.0" y="389.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="end" font-weight="400">RealSense stream</text>
+<rect x="230" y="366" width="560" height="28" fill="#fbfdff" stroke="#d9e2ec"/>
+<rect x="230" y="366" width="70.0" height="28" fill="#d64545" opacity="0.86"/>
+<text x="804.0" y="386.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="start" font-weight="700">30 Hz (33.3 ms)</text>
+<text x="804.0" y="404.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">1280x720</text>
+<line x1="230" y1="444" x2="790" y2="444" stroke="#d9e2ec"/>
+<line x1="230.0" y1="438" x2="230.0" y2="450" stroke="#d9e2ec"/>
+<text x="230.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">0</text>
+<line x1="370.0" y1="438" x2="370.0" y2="450" stroke="#d9e2ec"/>
+<text x="370.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">60</text>
+<line x1="510.0" y1="438" x2="510.0" y2="450" stroke="#d9e2ec"/>
+<text x="510.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">120</text>
+<line x1="650.0" y1="438" x2="650.0" y2="450" stroke="#d9e2ec"/>
+<text x="650.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">180</text>
+<line x1="790.0" y1="438" x2="790.0" y2="450" stroke="#d9e2ec"/>
+<text x="790.0" y="470.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">240</text>
+<text x="510.0" y="494.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="400">rate (Hz)</text>
+<text x="28.0" y="462.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Halt settings: threshold=30, duration=50; command transport=10.42.0.11:443</text>
+</svg>

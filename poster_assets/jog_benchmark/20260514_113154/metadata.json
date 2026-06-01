@@ -1,0 +1,47 @@
+{
+  "created": "20260514_113154",
+  "csv": "/home/zhuojian/dorna2-python-experimental/poster_assets/jog_benchmark/20260514_113154/jog_profile_benchmark.csv",
+  "host": "10.42.0.11",
+  "port": 443,
+  "profiles": [
+    "balanced",
+    "smooth",
+    "fast",
+    "legacy"
+  ],
+  "stroke_mm": 8.0,
+  "stroke_s": 1.2,
+  "cycles": 2,
+  "sample_hz": 40.0,
+  "rows": 689,
+  "summary": {
+    "balanced": {
+      "send_dt_mean_s": 0.013044828534437534,
+      "send_dt_std_s": 0.0012415293332547418,
+      "send_dt_max_s": 0.019392967224121094,
+      "effective_send_hz": 76.65873088021527,
+      "samples": 383
+    },
+    "smooth": {
+      "send_dt_mean_s": 0.01855801372993283,
+      "send_dt_std_s": 0.002101844807901439,
+      "send_dt_max_s": 0.025895118713378906,
+      "effective_send_hz": 53.885077064420265,
+      "samples": 287
+    },
+    "fast": {
+      "send_dt_mean_s": 0.010239542899400557,
+      "send_dt_std_s": 0.0006165203002678491,
+      "send_dt_max_s": 0.016164302825927734,
+      "effective_send_hz": 97.66060944561715,
+      "samples": 479
+    },
+    "legacy": {
+      "send_dt_mean_s": 0.013165958867683111,
+      "send_dt_std_s": 0.001511254035747393,
+      "send_dt_max_s": 0.02172374725341797,
+      "effective_send_hz": 75.95345010947734,
+      "samples": 383
+    }
+  }
+}

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="500" viewBox="0 0 1040 500">
+<rect width="1040" height="500" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 15. Multimodal evidence and provenance schema</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Each injection step can be reconstructed from synchronized robot, operator, vision, and fluidic records.</text>
+<defs><marker id="arrow4" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#1f2933"/></marker></defs>
+<rect x="42" y="100" width="205" height="110" rx="5" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="144.5" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#2f80ed" text-anchor="middle" font-weight="700">Robot</text>
+<text x="144.5" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">j0..j5 feedback</text>
+<text x="144.5" y="176.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">FK TCP pose</text>
+<text x="144.5" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">alarms and phases</text>
+<line x1="144.5" y1="216.0" x2="520.0" y2="232.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="283" y="100" width="205" height="110" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="385.5" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#219653" text-anchor="middle" font-weight="700">Operator</text>
+<text x="385.5" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">joystick axes</text>
+<text x="385.5" y="176.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">buttons</text>
+<text x="385.5" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">manual interventions</text>
+<line x1="385.5" y1="216.0" x2="520.0" y2="232.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="524" y="100" width="205" height="110" rx="5" fill="#f8fafc" stroke="#7b61ff" stroke-width="2"/>
+<text x="626.5" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#7b61ff" text-anchor="middle" font-weight="700">Vision</text>
+<text x="626.5" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">UVC x2: 30 fps</text>
+<text x="626.5" y="176.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">RealSense: 30 fps</text>
+<text x="626.5" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">UI screen video</text>
+<line x1="626.5" y1="216.0" x2="520.0" y2="232.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="765" y="100" width="205" height="110" rx="5" fill="#f8fafc" stroke="#f2a900" stroke-width="2"/>
+<text x="867.5" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#f2a900" text-anchor="middle" font-weight="700">Fluidics</text>
+<text x="867.5" y="158.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">step volume: 1.0 uL</text>
+<text x="867.5" y="176.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">endstop state</text>
+<text x="867.5" y="194.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">wash cycles</text>
+<line x1="867.5" y1="216.0" x2="520.0" y2="232.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="370.0" y="234.0" width="300" height="84" rx="5" fill="#ffffff" stroke="#1f2933" stroke-width="2"/>
+<text x="520.0" y="266.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#1f2933" text-anchor="middle" font-weight="700">Step recording directory</text>
+<text x="520.0" y="294.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="middle" font-weight="400">~/Desktop/RobotInjectionData</text>
+<line x1="520.0" y1="322.0" x2="171.0" y2="375.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="66" y="385" width="210" height="58" rx="5" fill="#fbfdff" stroke="#d9e2ec"/>
+<text x="171.0" y="408.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">telemetry.csv</text>
+<text x="171.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">time-aligned robot and operator state</text>
+<line x1="520.0" y1="322.0" x2="407.0" y2="375.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="302" y="385" width="210" height="58" rx="5" fill="#fbfdff" stroke="#d9e2ec"/>
+<text x="407.0" y="408.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">frames.csv</text>
+<text x="407.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">camera frame timestamps</text>
+<line x1="520.0" y1="322.0" x2="643.0" y2="375.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="538" y="385" width="210" height="58" rx="5" fill="#fbfdff" stroke="#d9e2ec"/>
+<text x="643.0" y="408.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">rs/uvc/ui mp4</text>
+<text x="643.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">visual evidence streams</text>
+<line x1="520.0" y1="322.0" x2="879.0" y2="375.0" stroke="#1f2933" stroke-width="1.8" marker-end="url(#arrow4)"/>
+<rect x="774" y="385" width="210" height="58" rx="5" fill="#fbfdff" stroke="#d9e2ec"/>
+<text x="879.0" y="408.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#1f2933" text-anchor="middle" font-weight="700">metadata</text>
+<text x="879.0" y="428.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#52616b" text-anchor="middle" font-weight="400">study, subject, material, volume</text>
+</svg>

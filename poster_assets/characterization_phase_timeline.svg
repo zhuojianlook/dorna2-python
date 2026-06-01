@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="430" viewBox="0 0 980 430">
+<rect width="980" height="430" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 9. Supervisory phase timeline</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Measured log: 20260428_162300/motion_characterization.csv.</text>
+<rect x="742" y="90" width="200" height="48" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="754.0" y="109.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="start" font-weight="700">Total cycle</text>
+<text x="754.0" y="130.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#1f2933" text-anchor="start" font-weight="700">25.31 s</text>
+<rect x="742" y="152" width="200" height="48" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="754.0" y="171.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="start" font-weight="700">Transit fraction</text>
+<text x="754.0" y="192.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#1f2933" text-anchor="start" font-weight="700">96%</text>
+<rect x="742" y="214" width="200" height="48" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="754.0" y="233.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="start" font-weight="700">Dwell/hold</text>
+<text x="754.0" y="254.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#1f2933" text-anchor="start" font-weight="700">1.11 s</text>
+<rect x="742" y="276" width="200" height="48" rx="5" fill="#f8fafc" stroke="#d9e2ec"/>
+<text x="754.0" y="295.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#52616b" text-anchor="start" font-weight="700">Longest phase</text>
+<text x="754.0" y="316.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#1f2933" text-anchor="start" font-weight="700">12.14 s</text>
+<text x="754.0" y="358.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="start" font-weight="400">cycle1 default to reload</text>
+<text x="160.0" y="90.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">baseline default</text>
+<rect x="170.0" y="72" width="23.7" height="26" fill="#219653"/>
+<text x="174.0" y="90.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#ffffff" text-anchor="start" font-weight="400">1.11s</text>
+<text x="160.0" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">cycle1 default to reload</text>
+<rect x="193.9" y="110" width="258.9" height="26" fill="#2f80ed"/>
+<text x="197.9" y="128.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#ffffff" text-anchor="start" font-weight="400">12.14s</text>
+<text x="160.0" y="166.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">cycle1 reload to default</text>
+<rect x="453.1" y="148" width="256.9" height="26" fill="#7b61ff"/>
+<text x="457.1" y="166.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#ffffff" text-anchor="start" font-weight="400">12.04s</text>
+<line x1="170" y1="196" x2="710" y2="196" stroke="#d9e2ec"/>
+<text x="170.0" y="216.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">0.0</text>
+<text x="710.0" y="216.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#52616b" text-anchor="middle" font-weight="400">25.3 s</text>
+<text x="440.0" y="238.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="700">phase timing supports cycle-time and supervision-duty reporting</text>
+</svg>

@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="678" viewBox="0 0 980 678">
+<rect width="980" height="678" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 1. Pose-transition burden matrix</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Pairwise joint-space motion burden; M marks destinations with a defined midpoint gate.</text>
+<text x="226.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 226.0 92.0)">Default</text>
+<text x="298.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 298.0 92.0)">Reload</text>
+<text x="370.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 370.0 92.0)">Injector Pose</text>
+<text x="442.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 442.0 92.0)">Safe Pose</text>
+<text x="514.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 514.0 92.0)">Wash1</text>
+<text x="586.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 586.0 92.0)">Wash2</text>
+<text x="658.0" y="92.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="end" transform="rotate(-42 658.0 92.0)">Calibration</text>
+<text x="178.0" y="144.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Default</text>
+<rect x="190" y="104" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="225.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="262" y="104" width="69" height="69" fill="#96a5f2" stroke="#ffffff"/>
+<text x="297.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">195</text>
+<text x="321.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="104" width="69" height="69" fill="#f1f5fb" stroke="#ffffff"/>
+<text x="369.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">11</text>
+<text x="393.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="104" width="69" height="69" fill="#d3daf8" stroke="#ffffff"/>
+<text x="441.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">72</text>
+<text x="465.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="104" width="69" height="69" fill="#8f9ff2" stroke="#ffffff"/>
+<text x="513.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">208</text>
+<text x="537.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="104" width="69" height="69" fill="#90a0f2" stroke="#ffffff"/>
+<text x="585.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">206</text>
+<text x="609.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="104" width="69" height="69" fill="#f2f6fb" stroke="#ffffff"/>
+<text x="657.0" y="143.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">9</text>
+<text x="681.0" y="119.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="216.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Reload</text>
+<rect x="190" y="176" width="69" height="69" fill="#96a5f2" stroke="#ffffff"/>
+<text x="225.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">195</text>
+<text x="249.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="176" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="297.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="334" y="176" width="69" height="69" fill="#99a8f3" stroke="#ffffff"/>
+<text x="369.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">187</text>
+<text x="393.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="176" width="69" height="69" fill="#a6b3f4" stroke="#ffffff"/>
+<text x="441.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">162</text>
+<text x="465.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="176" width="69" height="69" fill="#edf1fb" stroke="#ffffff"/>
+<text x="513.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">20</text>
+<text x="537.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="176" width="69" height="69" fill="#eef2fb" stroke="#ffffff"/>
+<text x="585.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">17</text>
+<text x="609.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="176" width="69" height="69" fill="#94a3f2" stroke="#ffffff"/>
+<text x="657.0" y="215.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">197</text>
+<text x="681.0" y="191.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="288.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Injector Pose</text>
+<rect x="190" y="248" width="69" height="69" fill="#f1f5fb" stroke="#ffffff"/>
+<text x="225.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">11</text>
+<text x="249.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="248" width="69" height="69" fill="#99a8f3" stroke="#ffffff"/>
+<text x="297.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">187</text>
+<text x="321.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="248" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="369.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="406" y="248" width="69" height="69" fill="#d6ddf8" stroke="#ffffff"/>
+<text x="441.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">66</text>
+<text x="465.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="248" width="69" height="69" fill="#93a2f2" stroke="#ffffff"/>
+<text x="513.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">201</text>
+<text x="537.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="248" width="69" height="69" fill="#93a3f2" stroke="#ffffff"/>
+<text x="585.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">199</text>
+<text x="609.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="248" width="69" height="69" fill="#f1f4fb" stroke="#ffffff"/>
+<text x="657.0" y="287.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">12</text>
+<text x="681.0" y="263.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="360.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Safe Pose</text>
+<rect x="190" y="320" width="69" height="69" fill="#d3daf8" stroke="#ffffff"/>
+<text x="225.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">72</text>
+<text x="249.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="320" width="69" height="69" fill="#a6b3f4" stroke="#ffffff"/>
+<text x="297.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">162</text>
+<text x="321.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="320" width="69" height="69" fill="#d6ddf8" stroke="#ffffff"/>
+<text x="369.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">66</text>
+<text x="393.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="320" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="441.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="478" y="320" width="69" height="69" fill="#a1aef3" stroke="#ffffff"/>
+<text x="513.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">172</text>
+<text x="537.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="320" width="69" height="69" fill="#a0aef3" stroke="#ffffff"/>
+<text x="585.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">173</text>
+<text x="609.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="320" width="69" height="69" fill="#d0d8f8" stroke="#ffffff"/>
+<text x="657.0" y="359.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">77</text>
+<text x="681.0" y="335.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="432.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Wash1</text>
+<rect x="190" y="392" width="69" height="69" fill="#8f9ff2" stroke="#ffffff"/>
+<text x="225.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">208</text>
+<text x="249.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="392" width="69" height="69" fill="#edf1fb" stroke="#ffffff"/>
+<text x="297.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">20</text>
+<text x="321.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="392" width="69" height="69" fill="#93a2f2" stroke="#ffffff"/>
+<text x="369.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">201</text>
+<text x="393.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="392" width="69" height="69" fill="#a1aef3" stroke="#ffffff"/>
+<text x="441.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">172</text>
+<text x="465.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="392" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="513.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="550" y="392" width="69" height="69" fill="#eff3fb" stroke="#ffffff"/>
+<text x="585.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">16</text>
+<text x="609.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="392" width="69" height="69" fill="#8e9ef2" stroke="#ffffff"/>
+<text x="657.0" y="431.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">211</text>
+<text x="681.0" y="407.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="504.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Wash2</text>
+<rect x="190" y="464" width="69" height="69" fill="#90a0f2" stroke="#ffffff"/>
+<text x="225.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">206</text>
+<text x="249.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="464" width="69" height="69" fill="#eef2fb" stroke="#ffffff"/>
+<text x="297.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">17</text>
+<text x="321.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="464" width="69" height="69" fill="#93a3f2" stroke="#ffffff"/>
+<text x="369.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">199</text>
+<text x="393.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="464" width="69" height="69" fill="#a0aef3" stroke="#ffffff"/>
+<text x="441.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">173</text>
+<text x="465.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="464" width="69" height="69" fill="#eff3fb" stroke="#ffffff"/>
+<text x="513.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">16</text>
+<text x="537.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="464" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="585.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<rect x="622" y="464" width="69" height="69" fill="#8e9ef2" stroke="#ffffff"/>
+<text x="657.0" y="503.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">209</text>
+<text x="681.0" y="479.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<text x="178.0" y="576.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="end" font-weight="400">Calibration</text>
+<rect x="190" y="536" width="69" height="69" fill="#f2f6fb" stroke="#ffffff"/>
+<text x="225.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">9</text>
+<text x="249.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="262" y="536" width="69" height="69" fill="#94a3f2" stroke="#ffffff"/>
+<text x="297.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">197</text>
+<text x="321.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="334" y="536" width="69" height="69" fill="#f1f4fb" stroke="#ffffff"/>
+<text x="369.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">12</text>
+<text x="393.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="406" y="536" width="69" height="69" fill="#d0d8f8" stroke="#ffffff"/>
+<text x="441.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">77</text>
+<text x="465.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="478" y="536" width="69" height="69" fill="#8e9ef2" stroke="#ffffff"/>
+<text x="513.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">211</text>
+<text x="537.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="550" y="536" width="69" height="69" fill="#8e9ef2" stroke="#ffffff"/>
+<text x="585.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">209</text>
+<text x="609.0" y="551.0" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#2f80ed" text-anchor="middle" font-weight="700">M</text>
+<rect x="622" y="536" width="69" height="69" fill="#f7fafc" stroke="#ffffff"/>
+<text x="657.0" y="575.0" font-family="Arial, Helvetica, sans-serif" font-size="11" fill="#1f2933" text-anchor="middle" font-weight="400">0</text>
+<text x="28.0" y="642.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Scale: 0 to 211 deg Euclidean norm across j0..j5. High-burden transitions justify staged motion and operator-gated final approach.</text>
+</svg>

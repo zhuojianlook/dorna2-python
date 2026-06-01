@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520">
+<rect width="1040" height="520" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 16. Settled endpoint repeatability</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Run launcher Repeatability Study to measure repeated settled endpoints.</text>
+<rect x="72" y="92" width="894" height="300" fill="#fbfdff" stroke="#d9e2ec"/>
+<text x="520.0" y="238.0" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#52616b" text-anchor="middle" font-weight="400">No repeatability dataset yet.</text>
+<text x="520.0" y="268.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#52616b" text-anchor="middle" font-weight="400">Use the startup launcher Repeatability Study button, then rerun this generator.</text>
+</svg>

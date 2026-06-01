@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="420" viewBox="0 0 1080 420">
+<rect width="1080" height="420" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 12. Contribution stack for reproducible supervised microinjection</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">The system converts manual microscope work into a logged, programmable, and characterizable robotic workflow.</text>
+<defs><marker id="arrow2" markerWidth="9" markerHeight="9" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#1f2933"/></marker></defs>
+<rect x="36" y="118" width="178" height="145" rx="6" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="125.0" y="148.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#2f80ed" text-anchor="middle" font-weight="700">Sensing</text>
+<text x="125.0" y="183.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">Dual UVC microscopy</text>
+<text x="125.0" y="203.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">RealSense context</text>
+<text x="125.0" y="223.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">thermal monitor</text>
+<line x1="219" y1="190.5" x2="240" y2="190.5" stroke="#1f2933" stroke-width="2" marker-end="url(#arrow2)"/>
+<rect x="248" y="118" width="178" height="145" rx="6" fill="#f8fafc" stroke="#7b61ff" stroke-width="2"/>
+<text x="337.0" y="148.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#7b61ff" text-anchor="middle" font-weight="700">State Estimation</text>
+<text x="337.0" y="183.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">joint feedback</text>
+<text x="337.0" y="203.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">FK TCP pose</text>
+<text x="337.0" y="223.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">Jacobian metrics</text>
+<line x1="431" y1="190.5" x2="452" y2="190.5" stroke="#1f2933" stroke-width="2" marker-end="url(#arrow2)"/>
+<rect x="460" y="118" width="178" height="145" rx="6" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="549.0" y="148.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#219653" text-anchor="middle" font-weight="700">Control</text>
+<text x="549.0" y="183.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">SO(3) jog control</text>
+<text x="549.0" y="203.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">local TCP insertion</text>
+<text x="549.0" y="223.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">midpoint gating</text>
+<line x1="643" y1="190.5" x2="664" y2="190.5" stroke="#1f2933" stroke-width="2" marker-end="url(#arrow2)"/>
+<rect x="672" y="118" width="178" height="145" rx="6" fill="#f8fafc" stroke="#f2a900" stroke-width="2"/>
+<text x="761.0" y="148.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#f2a900" text-anchor="middle" font-weight="700">Protocol</text>
+<text x="761.0" y="183.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">pose library</text>
+<text x="761.0" y="203.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">routine DSL</text>
+<text x="761.0" y="223.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">wash/inject state machine</text>
+<line x1="855" y1="190.5" x2="876" y2="190.5" stroke="#1f2933" stroke-width="2" marker-end="url(#arrow2)"/>
+<rect x="884" y="118" width="178" height="145" rx="6" fill="#f8fafc" stroke="#d64545" stroke-width="2"/>
+<text x="973.0" y="148.0" font-family="Arial, Helvetica, sans-serif" font-size="15" fill="#d64545" text-anchor="middle" font-weight="700">Evidence</text>
+<text x="973.0" y="183.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">telemetry CSV</text>
+<text x="973.0" y="203.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">multi-camera video</text>
+<text x="973.0" y="223.0" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#1f2933" text-anchor="middle" font-weight="400">UI recording</text>
+<text x="540.0" y="330.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#1f2933" text-anchor="middle" font-weight="700">Poster thesis: practical novelty is integration, traceability, and task-frame control for low-throughput protocol development where full autonomy is premature.</text>
+</svg>

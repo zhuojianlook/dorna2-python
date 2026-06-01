@@ -1,0 +1,36 @@
+{
+  "created": "20260428_162300",
+  "csv": "/home/zhuojian/dorna2-python-experimental/poster_assets/characterization/20260428_162300/motion_characterization.csv",
+  "host": "10.42.0.11",
+  "port": 443,
+  "cycles": 1,
+  "sample_hz": 40.0,
+  "move_vel": 20.0,
+  "alarm_threshold": 30,
+  "alarm_duration": 50,
+  "rows": 996,
+  "poses": {
+    "Default": {
+      "j0": 55.041504,
+      "j1": 32.958984,
+      "j2": -138.647461,
+      "j3": 58.601074,
+      "j4": 97.822266,
+      "j5": 13.161621
+    },
+    "Reload": {
+      "j0": 7.71,
+      "j1": 80.86,
+      "j2": -100.0,
+      "j3": -0.07,
+      "j4": -70.6,
+      "j5": 6.35
+    }
+  },
+  "settings_subset": {
+    "tool_lz": 30.0,
+    "tool_cx": 0.0,
+    "tool_cy": 0.0,
+    "approach_mm": 70.0
+  }
+}

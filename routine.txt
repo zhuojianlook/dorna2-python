@@ -1,25 +1,13 @@
-# Example routine
-# Keywords:
-#   POSE <name>           → move to <name>__midway and wait for ADVANCE step
-#   ADVANCE_WAIT          → user presses A to advance to final pose; B = free control at __midway
-#   ADVANCE_AUTO          → auto advance from midway to final pose
-#   WASH N                → repeat plunger BACKWARD→endstop then FORWARD→endstop N times
-# Notes:
-#   • Plunger NEVER actuates until the tool is at the final pose and settled (≥0.35 s).
-#   • After cycles, the plunger finishes at your configured **Final expel endstop**
-#     from settings.json / UI (default: BWD on this build).
-#
-ADVANCE_CANCEL
-POSE Injector_Pose
-ADVANCE_AUTO
-POSE Safe_Pose
-ADVANCE_AUTO
-POSE Wash1
-ADVANCE_AUTO
-WASH 1
-POSE Wash2
-ADVANCE_AUTO
-WASH 1
-POSE Safe_Pose
-ADVANCE_AUTO
-POSE test
+# New routine
+# Add steps from Settings > Routine, or edit this script directly.
+POSE Default
+ADVANCE_WAIT
+POSE Reload
+ADVANCE_WAIT
+POSE Default
+ADVANCE_WAIT
+POSE Default
+ADVANCE_WAIT
+POSE Default
+ADVANCE_WAIT
+WASH 3

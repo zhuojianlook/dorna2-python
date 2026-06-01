@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="520" viewBox="0 0 980 520">
+<rect width="980" height="520" fill="#ffffff"/>
+<text x="28.0" y="34.0" font-family="Arial, Helvetica, sans-serif" font-size="21" fill="#1f2933" text-anchor="start" font-weight="700">Figure 13. Measured characterization summary</text>
+<text x="28.0" y="56.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="400">Latest log: poster_assets/characterization/20260428_162300/motion_characterization.csv</text>
+<rect x="54" y="94" width="205" height="82" rx="5" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="68.0" y="120.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Samples</text>
+<text x="68.0" y="152.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">996</text>
+<rect x="287" y="94" width="205" height="82" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="301.0" y="120.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Duration</text>
+<text x="301.0" y="152.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">25.3 s</text>
+<rect x="520" y="94" width="205" height="82" rx="5" fill="#f8fafc" stroke="#7b61ff" stroke-width="2"/>
+<text x="534.0" y="120.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Phases</text>
+<text x="534.0" y="152.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">3</text>
+<rect x="753" y="94" width="205" height="82" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="767.0" y="120.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Alarm latch</text>
+<text x="767.0" y="152.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">none</text>
+<rect x="54" y="204" width="205" height="82" rx="5" fill="#f8fafc" stroke="#7b61ff" stroke-width="2"/>
+<text x="68.0" y="230.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Max ||dq/dt||</text>
+<text x="68.0" y="262.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">33.5 deg/s</text>
+<rect x="287" y="204" width="205" height="82" rx="5" fill="#f8fafc" stroke="#2f80ed" stroke-width="2"/>
+<text x="301.0" y="230.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Max ||dx/dt||</text>
+<text x="301.0" y="262.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">63.0 mm/s</text>
+<rect x="520" y="204" width="205" height="82" rx="5" fill="#f8fafc" stroke="#22a6b3" stroke-width="2"/>
+<text x="534.0" y="230.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">TCP x span</text>
+<text x="534.0" y="262.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">69.7 mm</text>
+<rect x="753" y="204" width="205" height="82" rx="5" fill="#f8fafc" stroke="#22a6b3" stroke-width="2"/>
+<text x="767.0" y="230.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">TCP y span</text>
+<text x="767.0" y="262.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">147 mm</text>
+<rect x="54" y="314" width="205" height="82" rx="5" fill="#f8fafc" stroke="#22a6b3" stroke-width="2"/>
+<text x="68.0" y="340.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">TCP z span</text>
+<text x="68.0" y="372.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">160 mm</text>
+<rect x="287" y="314" width="205" height="82" rx="5" fill="#f8fafc" stroke="#219653" stroke-width="2"/>
+<text x="301.0" y="340.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Dexterity source</text>
+<text x="301.0" y="372.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">logged</text>
+<rect x="520" y="314" width="205" height="82" rx="5" fill="#f8fafc" stroke="#d64545" stroke-width="2"/>
+<text x="534.0" y="340.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Min sigma</text>
+<text x="534.0" y="372.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">0.00</text>
+<rect x="753" y="314" width="205" height="82" rx="5" fill="#f8fafc" stroke="#d64545" stroke-width="2"/>
+<text x="767.0" y="340.0" font-family="Arial, Helvetica, sans-serif" font-size="13" fill="#52616b" text-anchor="start" font-weight="700">Min manip.</text>
+<text x="767.0" y="372.0" font-family="Arial, Helvetica, sans-serif" font-size="22" fill="#1f2933" text-anchor="start" font-weight="700">12816415</text>
+<text x="490.0" y="462.0" font-family="Arial, Helvetica, sans-serif" font-size="14" fill="#1f2933" text-anchor="middle" font-weight="700">Dexterity metrics use logged Jacobian metrics; trajectory and speed are measured.</text>
+</svg>

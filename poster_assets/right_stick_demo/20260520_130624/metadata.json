@@ -1,0 +1,98 @@
+{
+  "created": "20260520_130624",
+  "csv": "/home/zhuojian/dorna2-python-experimental/poster_assets/right_stick_demo/20260520_130624/right_stick_tcp_demo.csv",
+  "host": "10.42.0.11",
+  "port": 443,
+  "sample_hz": 40.0,
+  "move_vel": 8.0,
+  "tilt_deg": 10.0,
+  "alarm_threshold": 30,
+  "alarm_duration": 50,
+  "rows": 790,
+  "base_joint_deg": [
+    55.041504,
+    32.958984,
+    -138.647461,
+    58.601074,
+    97.844238,
+    13.183594
+  ],
+  "base_tcp_xyzabc": [
+    222.7734648635302,
+    230.69449209024083,
+    154.69476258316004,
+    126.35829336109772,
+    -2.794021751117558,
+    125.32232843200244
+  ],
+  "segments": [
+    {
+      "segment": "baseline_fixed_tcp",
+      "command": "center",
+      "rows": 36,
+      "max_joint_delta_norm_deg": 0.058134715600925306,
+      "max_tcp_drift_norm_mm": 0.12186324553681166
+    },
+    {
+      "segment": "right_stick_up",
+      "command": "up",
+      "rows": 96,
+      "max_joint_delta_norm_deg": 12.245079635426585,
+      "max_tcp_drift_norm_mm": 0.2655760697143695
+    },
+    {
+      "segment": "return_center_after_up",
+      "command": "center",
+      "rows": 91,
+      "max_joint_delta_norm_deg": 12.239735907847107,
+      "max_tcp_drift_norm_mm": 0.33721328769196757
+    },
+    {
+      "segment": "right_stick_down",
+      "command": "down",
+      "rows": 94,
+      "max_joint_delta_norm_deg": 12.275735986024062,
+      "max_tcp_drift_norm_mm": 0.12835189528278532
+    },
+    {
+      "segment": "return_center_after_down",
+      "command": "center",
+      "rows": 94,
+      "max_joint_delta_norm_deg": 12.296581707835106,
+      "max_tcp_drift_norm_mm": 0.3366515321924461
+    },
+    {
+      "segment": "right_stick_left",
+      "command": "left",
+      "rows": 94,
+      "max_joint_delta_norm_deg": 15.491611155082227,
+      "max_tcp_drift_norm_mm": 0.29603301799076776
+    },
+    {
+      "segment": "return_center_after_left",
+      "command": "center",
+      "rows": 96,
+      "max_joint_delta_norm_deg": 16.070141021437365,
+      "max_tcp_drift_norm_mm": 0.25931460155903663
+    },
+    {
+      "segment": "right_stick_right",
+      "command": "right",
+      "rows": 94,
+      "max_joint_delta_norm_deg": 11.302000009647141,
+      "max_tcp_drift_norm_mm": 0.23207670937385713
+    },
+    {
+      "segment": "return_center_after_right",
+      "command": "center",
+      "rows": 95,
+      "max_joint_delta_norm_deg": 16.843628333758314,
+      "max_tcp_drift_norm_mm": 0.31939313389244417
+    }
+  ],
+  "settings_subset": {
+    "tool_lz": 30.0,
+    "tool_cx": 0.0,
+    "tool_cy": 0.0
+  }
+}
